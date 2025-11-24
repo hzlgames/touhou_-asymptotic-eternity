@@ -95,16 +95,16 @@ export enum TileType {
   EMPTY = 0,
   WALL = 1,
   FLOOR = 2,
-  DECORATION = 3, // General Decoration
+  DECORATION = 3,
   DOOR = 4,
   VOID = 5,
   PATH = 6,
   LOCKED_DOOR = 7,
-  PILLAR = 8,     // New: For corridor rhythm
-  LANTERN = 9,     // New: For visual anchoring
-  SEAL = 10,       // New: Floor marker for loop
+  PILLAR = 8,
   
   // Advanced Puzzle Tiles
+  LANTERN = 9,     
+  SEAL = 10,       
   WATER = 11,
   BRIDGE = 12,
   BOOKSHELF = 13,
@@ -131,7 +131,7 @@ export interface MapTrigger {
     targetY?: number;
     message?: string;
     condition?: (flags: Set<string>) => boolean;
-    flashEffect?: boolean; // New: visual feedback for teleport
+    flashEffect?: boolean;
 }
 
 export interface InteractionHelpers {

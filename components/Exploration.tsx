@@ -35,12 +35,15 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
      });
   }, []);
 
-  // Load Map Logic when flags change
+  // Load Map Logic when flags OR WORLDTYPE change
+  // This is crucial for the "Water -> Bridge" puzzle. 
+  // When worldType changes, we regenerate the grid so tiles become walkable.
   useEffect(() => {
     const data = getStage1Data(
         flags, 
         inventory,
-        handleReimuEncounter
+        handleReimuEncounter,
+        worldType 
     );
     setMapData(data);
     
@@ -48,7 +51,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
     if (playerPos.x === 0 && playerPos.y === 0) {
         setPlayerPos(data.spawnPoint);
     }
-  }, [flags, inventory, handleReimuEncounter]); 
+  }, [flags, inventory, handleReimuEncounter, worldType]); 
 
   // --- INPUT & GAME LOOP ---
   const keysRef = useRef<Record<string, boolean>>({});
@@ -88,9 +91,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
         // 0. FX Decay
         if (flashOpacity > 0) setFlashOpacity(prev => Math.max(0, prev - 0.1));
-        if (loopMessage) {
-             // Handled by CSS animation usually
-        }
 
         // 1. Sanity Drain
         if (worldType === WorldType.INNER_WORLD) {
@@ -145,7 +145,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [mapData, playerPos, worldType, dialogue, interactionTarget, sanity, flashOpacity, loopMessage]);
+  }, [mapData, playerPos, worldType, dialogue, interactionTarget, sanity, flashOpacity]);
 
   // --- LOGIC HELPERS ---
 
@@ -170,10 +170,10 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           
           if (tile === TileType.WALL || tile === TileType.VOID || tile === TileType.LOCKED_DOOR || tile === TileType.PILLAR || tile === TileType.BOOKSHELF || tile === TileType.FURNACE) return false;
           
-          // WATER logic: Passable only if it's a Bridge
+          // WATER logic: Impassable
           if (tile === TileType.WATER) return false;
-          // BRIDGE logic: Passable
-          if (tile === TileType.BRIDGE) return true;
+          // BRIDGE logic: Passable (It's not listed in the blockers above)
+          // BRIDGE is implicity passable.
       }
 
       // Entity Collision
@@ -200,7 +200,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           if (trigger.condition && !trigger.condition(flags)) return;
 
           if (trigger.type === 'TELEPORT' && trigger.targetX !== undefined) {
-              // Preserve decimal offset for smooth visual transition
               const offsetX = x - tileX;
               const offsetY = y - tileY;
               
@@ -210,10 +209,10 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
               });
               
               if (trigger.flashEffect) setFlashOpacity(1);
-              
-              // Show Feedback
-              setLoopMessage("∞ ETERNITY LOOP DETECTED ∞");
-              setTimeout(() => setLoopMessage(null), 2000);
+              if (trigger.message) {
+                  setLoopMessage(trigger.message);
+                  setTimeout(() => setLoopMessage(null), 3000);
+              }
           }
       }
   };
@@ -257,19 +256,20 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       if (!mapData) return { x: 0, y: 0 };
       const cx = playerPos.x * TILE_SIZE - window.innerWidth / 2;
       const cy = playerPos.y * TILE_SIZE - window.innerHeight / 2;
-      const maxW = mapData.width * TILE_SIZE - window.innerWidth;
-      const maxH = mapData.height * TILE_SIZE - window.innerHeight;
       
-      // Clamp logic fixed for negative constraints
-      // If map is smaller than screen, center it
+      // Clamp Logic
+      // We want to stop panning if we hit the edge of the map
       let tx = -cx;
       let ty = -cy;
       
+      const minX = -(mapData.width * TILE_SIZE - window.innerWidth);
+      const minY = -(mapData.height * TILE_SIZE - window.innerHeight);
+
       if (mapData.width * TILE_SIZE < window.innerWidth) tx = (window.innerWidth - mapData.width * TILE_SIZE) / 2;
-      else tx = Math.min(0, Math.max(tx, -(mapData.width * TILE_SIZE - window.innerWidth)));
+      else tx = Math.max(minX, Math.min(0, tx));
 
       if (mapData.height * TILE_SIZE < window.innerHeight) ty = (window.innerHeight - mapData.height * TILE_SIZE) / 2;
-      else ty = Math.min(0, Math.max(ty, -(mapData.height * TILE_SIZE - window.innerHeight)));
+      else ty = Math.max(minY, Math.min(0, ty));
 
       return { x: tx, y: ty };
   };
@@ -350,10 +350,10 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                 <p className="text-sm font-serif italic">{mapData.objectiveText}</p>
                 {inventory.size > 0 && (
                      <div className="mt-2 pt-2 border-t border-gray-700">
-                         <div className="text-xs text-gray-500">Key Items:</div>
+                         <div className="text-xs text-gray-500">Inventory:</div>
                          <div className="flex gap-1 flex-wrap mt-1">
                              {Array.from(inventory).map((item, i) => (
-                                 <span key={i} className="text-xs bg-blue-900/50 px-1 border border-blue-500 rounded">{item.split(':')[0]}</span>
+                                 <span key={i} className="text-xs bg-blue-900/50 px-1 border border-blue-500 rounded">{item}</span>
                              ))}
                          </div>
                      </div>
