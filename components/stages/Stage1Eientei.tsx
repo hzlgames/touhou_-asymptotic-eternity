@@ -16,7 +16,7 @@ export const getStage1Data = (
     flags: Set<string>,
     inventory: Set<string>,
     onReimuInteract: () => void,
-    worldType: WorldType // Added to dynamically change tiles (Water -> Bridge)
+    worldType: WorldType
 ): MapData => {
   const tiles: number[][] = [];
   const entities: MapEntity[] = [];
@@ -45,12 +45,12 @@ export const getStage1Data = (
       getRotation('STATUE_SW') === 0;
 
   // Objective Logic
-  let objectiveText = "Explore the courtyard.";
-  if (!lanternsLit) objectiveText = "The river of blood blocks the way. Light the lanterns in reality.";
-  else if (!hasKey) objectiveText = "Search the West Archives. Burn the past to find the key.";
-  else if (!statuesCorrect) objectiveText = "The East Hall Statues whisper. Match the gaze of the dead.";
-  else if (!paintingTorn) objectiveText = "The path ahead is infinite. Search for a discrepancy in the Reality paintings.";
-  else objectiveText = "The loop is broken. Enter the secret passage behind the painting.";
+  let objectiveText = "Proceed to the Administration Desk (Shrine).";
+  if (!lanternsLit) objectiveText = "A firewall (Data Stream) blocks the path. Activate the Auth Nodes in Reality.";
+  else if (!hasKey) objectiveText = "Access the Archive Room. Incinerate the 'Corrupt Data' to find the admin key.";
+  else if (!statuesCorrect) objectiveText = "The Security Drones are watching. Align their vision with the glitches.";
+  else if (!paintingTorn) objectiveText = "Infinite Redirect Loop detected. Find the anomaly in the Compliance Posters.";
+  else objectiveText = "Loop terminated. Enter the Debug Backdoor.";
 
   // --- 1. BUILD GEOMETRY ---
   for (let y = 0; y < MAP_HEIGHT; y++) {
@@ -64,7 +64,7 @@ export const getStage1Data = (
       if (y >= 30) {
           if (x >= 10 && x <= 30) tile = TileType.FLOOR;
           
-          // The River (y: 34-36)
+          // The River (y: 34-36) -> DATA STREAM
           if (y >= 34 && y <= 36) {
               tile = TileType.WATER; 
               if (lanternsLit && !isReality && (x === 15 || x === 25)) tile = TileType.BRIDGE;
@@ -76,7 +76,7 @@ export const getStage1Data = (
           if (x >= 5 && x <= 35) tile = TileType.FLOOR; // Wide hub
       }
 
-      // 3. WEST ARCHIVES (x: 2-12, y: 10-28)
+      // 3. WEST ARCHIVES (x: 2-12, y: 10-28) -> FILING ROOM
       if (x >= 2 && x <= 12 && y >= 10 && y <= 28) {
           tile = TileType.FLOOR;
           if (x === 2 || x === 12 || y === 10 || y === 28) tile = TileType.WALL;
@@ -84,7 +84,7 @@ export const getStage1Data = (
           if (tile === TileType.FLOOR && x > 3 && x < 11 && y % 3 === 0) tile = TileType.BOOKSHELF;
       }
 
-      // 4. EAST STATUE HALL (x: 28-38, y: 10-28)
+      // 4. EAST STATUE HALL (x: 28-38, y: 10-28) -> DRONE HANGAR
       if (x >= 28 && x <= 38 && y >= 10 && y <= 28) {
           tile = TileType.FLOOR;
           if (x === 28 || x === 38 || y === 10 || y === 28) tile = TileType.WALL;
@@ -119,56 +119,58 @@ export const getStage1Data = (
 
   // --- 2. ENTITIES & PUZZLES ---
 
-  // === GARDEN PUZZLE ===
+  // === GARDEN PUZZLE (LANTERNS -> NODES) ===
   ['LANTERN_L', 'LANTERN_R'].forEach((id, idx) => {
       const lx = idx === 0 ? 14 : 26;
       entities.push({
           id, x: lx, y: 38, 
-          name: 'Stone Lantern', 
-          color: flags.has(id) ? '#ffaa00' : '#555', 
+          name: 'Auth Node', 
+          color: flags.has(id) ? '#00ff00' : '#333', 
           interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
           onInteract: ({ setFlag, worldType }) => {
               if (worldType === WorldType.REALITY) {
                   if (!flags.has(id)) {
                       setFlag(id);
-                      alert("You light the lantern. The flame is weak, but it casts a strange shadow.");
+                      alert("TERMINAL: Access Authorized. Debug bridge compilation started.");
+                  } else {
+                      alert("TERMINAL: System Normal.");
                   }
               } else {
-                  alert("A spiritual flame burns here, hardening the blood nearby.");
+                  alert("ERROR: Hardware interaction required in Physical Layer.");
               }
           }
       });
   });
 
-  // === ARCHIVE PUZZLE ===
-  if (!inventory.has('Dusty Book') && !bookBurned) {
+  // === ARCHIVE PUZZLE (BOOK -> ERROR LOG) ===
+  if (!inventory.has('Error Log') && !bookBurned) {
       entities.push({
           id: 'dusty_book', x: 6, y: 15, 
-          name: 'Dusty Shelf', color: 'transparent', interactionType: 'ITEM', isSolid: false, visibleIn: WorldType.REALITY,
-          onInteract: ({ addItem }) => addItem('Dusty Book', 'Dusty Book')
+          name: 'Corrupt File', color: 'transparent', interactionType: 'ITEM', isSolid: false, visibleIn: WorldType.REALITY,
+          onInteract: ({ addItem }) => addItem('Error Log', 'Error Log')
       });
   }
 
   entities.push({
       id: 'furnace', x: 7, y: 12,
-      name: 'Cursed Furnace', color: '#aa0000', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
+      name: 'System Recycler', color: '#555', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
       onInteract: ({ hasItem, setFlag, worldType, addItem }) => {
           if (worldType === WorldType.INNER_WORLD) {
-              if (bookBurned) alert("The fire has died down. Ashes remain.");
-              else if (hasItem('Dusty Book')) {
+              if (bookBurned) alert("RECYCLER: Empty.");
+              else if (hasItem('Error Log')) {
                    setFlag('BOOK_BURNED');
-                   alert("You throw the book into the cursed fire. It screams as it burns to ash.");
-              } else alert("A hungry fire. It demands knowledge.");
+                   alert("You drag the 'Error Log' into the Recycle Bin. It dissolves into binary dust.");
+              } else alert("RECYCLER: Awaiting corrupted data input.");
           } else {
               if (bookBurned && !inventory.has('Archive Key')) {
-                  addItem('Archive Key', 'Archive Key');
-                  alert("You sift through the cold ashes in the real world... You found a metal key!");
-              } else alert("A cold stone fireplace.");
+                  addItem('Archive Key', 'Admin Key');
+                  alert("Recovered 'Admin Key' from deleted file metadata!");
+              } else alert("A secure data shredder.");
           }
       }
   });
 
-  // === STATUE PUZZLE (ROTATION LOGIC IMPROVED) ===
+  // === STATUE PUZZLE (STATUE -> DRONES) ===
   const statueConfig = [
       { id: 'STATUE_NW', x: 30, y: 14, correct: 1 }, 
       { id: 'STATUE_NE', x: 36, y: 14, correct: 2 }, 
@@ -182,7 +184,7 @@ export const getStage1Data = (
       // Reality: Click to Rotate
       entities.push({
           id: s.id, x: s.x, y: s.y,
-          name: 'Rabbit Statue', color: '#888', interactionType: 'PUZZLE', isSolid: true, visibleIn: WorldType.REALITY,
+          name: 'Security Drone', color: '#888', interactionType: 'PUZZLE', isSolid: true, visibleIn: WorldType.REALITY,
           rotation: currentRot,
           onInteract: ({ setFlag, removeFlag }) => {
               // Calculate next rotation
@@ -197,41 +199,41 @@ export const getStage1Data = (
           }
       });
 
-      // Inner World: Ghost Hint
+      // Inner World: Ghost Hint -> Glitch
       entities.push({
           id: `ghost_${s.id}`, x: s.x, y: s.y,
-          name: 'Weeping Ghost', color: '#00ffff', interactionType: 'DIALOGUE', isSolid: true, visibleIn: WorldType.INNER_WORLD,
+          name: 'Glitch Phantom', color: '#00ffff', interactionType: 'DIALOGUE', isSolid: true, visibleIn: WorldType.INNER_WORLD,
           rotation: s.correct, 
-          onInteract: () => alert("The ghost stares in a fixed direction...")
+          onInteract: () => alert("The glitch points towards a vector...")
       });
   });
 
-  // === LOOP & SECRET DOOR PUZZLE ===
+  // === LOOP & SECRET DOOR PUZZLE (PAINTING -> POSTER) ===
   
   // The Painting that hides the secret door
   if (hasKey && statuesCorrect) {
     if (!paintingTorn) {
         entities.push({
             id: 'secret_painting', x: 22, y: 20, // On the right wall of the corridor entrance
-            name: 'Suspicious Painting', color: '#ff00ff', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
+            name: 'Compliance Poster', color: '#ff00ff', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
             onInteract: ({ worldType, setFlag }) => {
                 if (worldType === WorldType.INNER_WORLD) {
                     setFlag('PAINTING_TORN');
-                    alert("You tear down the Talisman Poster. A cold draft blows from the wall behind it.");
+                    alert("You rip down the 'OBEY' poster. Behind it lies a developer backdoor.");
                 } else {
-                    alert("A painting of 'The Great Wave'. It looks slightly askew.");
+                    alert("A poster that reads: 'REPORT BUGS IMMEDIATELY'. It hangs crooked.");
                 }
             }
         });
     }
   }
 
-  // Loop Trigger Logic: Only active in the main corridor (x=18-22)
+  // Loop Trigger Logic
   if (!paintingTorn) {
       for (let x = 18; x <= 22; x++) {
           triggers[`${x},${LOOP_TRIGGER_Y}`] = {
               type: 'TELEPORT', targetX: x, targetY: LOOP_RESET_Y, flashEffect: true,
-              message: "The corridor stretches infinitely..."
+              message: "REDIRECT: 302 FOUND. LOOPING..."
           };
       }
   }
@@ -239,7 +241,7 @@ export const getStage1Data = (
   // === BOSS ===
   entities.push({
       id: 'boss', x: 20, y: 3, 
-      name: 'Greedy Reimu', color: 'red', interactionType: 'BATTLE', isSolid: true, visibleIn: 'BOTH',
+      name: 'Admin Reimu', color: 'red', interactionType: 'BATTLE', isSolid: true, visibleIn: 'BOTH',
       onInteract: onReimuInteract
   });
 
@@ -258,6 +260,10 @@ export const getStage1Data = (
 const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
   const isReality = worldType === WorldType.REALITY;
 
+  // -- VISUAL STYLES --
+  // Reality: Construction site, Grey/Yellow, "Under Maintenance"
+  // Inner: Red/Black, Glitches, "Fatal Error"
+
   const renderTile = (type: number, x: number, y: number) => {
     const style: React.CSSProperties = {
         position: 'absolute',
@@ -267,31 +273,34 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
         height: TILE_SIZE,
     };
 
-    if (type === TileType.WATER) {
+    if (type === TileType.WATER) { // DATA STREAM
         return (
-            <div key={`${x}-${y}`} style={style} className={`transition-colors duration-1000 ${isReality ? 'bg-blue-900/80' : 'bg-red-900 animate-pulse'}`}>
-                <div className="w-full h-full opacity-50" style={{backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.2) 2px, transparent 3px)', backgroundSize: '16px 16px'}}></div>
+            <div key={`${x}-${y}`} style={style} className={`overflow-hidden transition-colors duration-1000 ${isReality ? 'bg-gray-800' : 'bg-black border border-red-500'}`}>
+                {/* Rolling code effect */}
+                <div className="w-full h-full opacity-50 flex flex-col text-[8px] leading-none font-mono text-green-500 animate-pulse">
+                    {Array(10).fill(0).map((_, i) => <div key={i}>{Math.random().toString(36).substring(7)}</div>)}
+                </div>
+                {!isReality && <div className="absolute inset-0 bg-red-900/50 animate-pulse"></div>}
             </div>
         );
     }
     if (type === TileType.BRIDGE) {
         return (
-            <div key={`${x}-${y}`} style={style} className="bg-red-950 border-x-2 border-red-500 shadow-[0_0_15px_red] z-10">
-                <div className="text-center text-red-500 text-xs mt-2 font-mono">BRIDGE</div>
+            <div key={`${x}-${y}`} style={style} className="bg-blue-900/80 border-x-2 border-blue-400 shadow-[0_0_15px_blue] z-10 flex items-center justify-center">
+                <div className="text-[10px] text-blue-200 font-mono">DEBUG<br/>BRIDGE</div>
             </div>
         );
     }
     if (type === TileType.SECRET_DOOR) {
         return (
-            <div key={`${x}-${y}`} style={style} className="bg-[#1a0505] border-2 border-dashed border-[#FFD700] z-0 flex items-center justify-center">
-                 <div className="text-xs text-[#FFD700]">SECRET</div>
+            <div key={`${x}-${y}`} style={style} className="bg-black border-2 border-dashed border-green-500 z-0 flex items-center justify-center">
+                 <div className="text-xs text-green-500 font-mono animate-pulse">BACKDOOR</div>
             </div>
         );
     }
     if (type === TileType.PATH) {
-        // The hidden corridor floor
         return (
-            <div key={`${x}-${y}`} style={style} className="bg-[#1a0505] shadow-inner"></div>
+            <div key={`${x}-${y}`} style={style} className="bg-[#111] shadow-inner border border-[#333]"></div>
         );
     }
 
@@ -299,28 +308,48 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
 
     if (type === TileType.FLOOR) {
          return (
-            <div key={`${x}-${y}`} style={style} className={`${isReality ? 'bg-[#2d241b]' : 'bg-[#aa8800]'} border-r border-b border-black/20`}></div>
+            <div key={`${x}-${y}`} style={style} className={`
+                ${isReality ? 'bg-[#e0e0e0]' : 'bg-[#2a0a0a]'} 
+                border-r border-b border-black/10
+            `}>
+                {isReality && (x+y)%2===0 && (
+                    <div className="w-full h-full border-4 border-yellow-500/20 box-border"></div>
+                )}
+            </div>
          );
     }
     
     if (type === TileType.WALL) {
         return (
-            <div key={`${x}-${y}`} style={style} className="bg-[#1a110d] border-b-4 border-black"></div>
+            <div key={`${x}-${y}`} style={style} className={`
+                ${isReality ? 'bg-gray-200' : 'bg-[#300]'}
+                flex items-center justify-center overflow-hidden
+            `}>
+                {isReality ? (
+                    // Reality: Caution Tape Wall
+                    <div className="w-full h-full bg-[repeating-linear-gradient(45deg,#facc15,#facc15_10px,#000_10px,#000_20px)] opacity-50"></div>
+                ) : (
+                    // Inner: Firewall
+                    <div className="w-full h-full border border-red-600 shadow-[inset_0_0_10px_red]">
+                        <div className="text-[8px] text-red-600 font-mono p-1">ACCESS DENIED</div>
+                    </div>
+                )}
+            </div>
         );
     }
 
-    if (type === TileType.BOOKSHELF) {
+    if (type === TileType.BOOKSHELF) { // SERVERS / FILES
         return (
-             <div key={`${x}-${y}`} style={style} className="bg-[#3e2723] flex flex-col justify-around px-1 border-x border-black">
+             <div key={`${x}-${y}`} style={style} className="bg-[#222] border border-gray-600 flex flex-col justify-end p-1">
                  {isReality ? (
-                     <>
-                        <div className="h-2 bg-[#5d4037] w-full mb-1"></div>
-                        <div className="h-2 bg-[#5d4037] w-3/4 mb-1"></div>
-                        <div className="h-2 bg-[#5d4037] w-full"></div>
-                     </>
+                     <div className="flex flex-col gap-1">
+                        <div className="h-1 bg-green-500 w-2 animate-pulse rounded-full self-end"></div>
+                        <div className="h-1 bg-green-500 w-2 animate-pulse rounded-full self-end delay-75"></div>
+                        <div className="text-[8px] text-gray-400 font-mono text-center">SRV-0{x}</div>
+                     </div>
                  ) : (
-                     <div className="text-[10px] text-red-500 font-mono break-all leading-none opacity-50">
-                         DIE DIE DIE
+                     <div className="text-[10px] text-red-500 font-mono break-all leading-none opacity-50 text-center animate-pulse">
+                         ERROR<br/>404
                      </div>
                  )}
              </div>
@@ -341,12 +370,11 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
       };
 
       if (entity.id.includes('LANTERN')) {
-          const isLit = entity.color === '#ffaa00';
+          const isLit = entity.color === '#00ff00';
           return (
               <div key={entity.id} style={style} className="absolute z-20 flex justify-center items-end pb-2 pointer-events-none">
-                  <div className={`w-8 h-12 bg-stone-700 flex flex-col items-center ${isLit ? 'shadow-[0_0_30px_orange]' : ''}`}>
-                      <div className="w-10 h-2 bg-stone-800"></div>
-                      <div className={`w-4 h-4 mt-2 ${isLit ? 'bg-yellow-200 animate-pulse' : 'bg-black'}`}></div>
+                  <div className={`w-8 h-12 bg-gray-800 border-2 ${isLit ? 'border-green-500 shadow-[0_0_15px_green]' : 'border-red-500'} flex flex-col items-center justify-center`}>
+                      <div className={`w-6 h-6 rounded-full ${isLit ? 'bg-green-400 animate-pulse' : 'bg-red-900'}`}></div>
                   </div>
               </div>
           );
@@ -355,30 +383,42 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
       if (entity.id === 'secret_painting') {
           return (
             <div key={entity.id} style={style} className="absolute z-20 flex items-center justify-center pointer-events-none">
-                <div className={`w-12 h-16 bg-white border-4 border-yellow-600 shadow-md ${!isReality ? 'animate-pulse border-red-500' : ''}`}>
-                    {!isReality ? <span className="text-red-600 text-xs font-bold p-1">SEAL</span> : <span className="text-blue-900 text-xs">ART</span>}
+                <div className={`w-12 h-16 bg-white border-2 border-black shadow-md flex flex-col items-center justify-center ${!isReality ? 'animate-pulse bg-red-100' : ''}`}>
+                    <div className="text-[8px] font-bold">NOTICE</div>
+                    <div className="w-8 h-8 border border-black flex items-center justify-center text-xs">👁️</div>
                 </div>
             </div>
           );
       }
 
-      if (entity.name.includes('Statue') || entity.name.includes('Ghost')) {
+      if (entity.id === 'furnace') { // SHREDDER
+          return (
+            <div key={entity.id} style={style} className="absolute z-20 flex items-center justify-center pointer-events-none">
+                <div className="w-12 h-12 bg-gray-700 rounded-sm border-t-4 border-black flex items-center justify-center">
+                    <span className="text-xl">🗑️</span>
+                </div>
+            </div>
+          );
+      }
+
+      if (entity.name.includes('Drone') || entity.name.includes('Glitch')) {
           const rotDeg = (entity.rotation || 0) * 90;
           return (
               <div key={entity.id} style={style} className="absolute z-20 flex justify-center items-center pointer-events-none">
                   <div 
                     className={`w-10 h-10 transition-transform duration-500 flex items-center justify-center
-                        ${entity.name.includes('Ghost') ? 'opacity-80' : 'bg-gray-400 rounded-sm'}
+                        ${entity.name.includes('Glitch') ? 'opacity-80' : 'bg-white rounded-full border-4 border-gray-800'}
                     `}
                     style={{ transform: `rotate(${rotDeg}deg)` }}
                   >
-                      {entity.name.includes('Ghost') ? (
-                          <div className="text-3xl filter drop-shadow-[0_0_5px_cyan]">👻</div>
+                      {entity.name.includes('Glitch') ? (
+                          <div className="text-3xl filter drop-shadow-[0_0_5px_cyan]">⚠️</div>
                       ) : (
-                          <div className="text-2xl">🐰</div>
+                          // Drone Eye
+                          <div className="w-4 h-4 bg-red-500 rounded-full shadow-[0_0_5px_red]"></div>
                       )}
-                      <div className="absolute -top-4 text-xs font-bold text-white bg-black/50 px-1">
-                           {['UP','RIGHT','DOWN','LEFT'][entity.rotation || 0]}
+                      <div className="absolute -top-6 text-[10px] font-bold text-white bg-black/80 px-1 font-mono">
+                           CAM-{['N','E','S','W'][entity.rotation || 0]}
                       </div>
                   </div>
               </div>
@@ -387,9 +427,9 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
       
       return (
           <div key={entity.id} style={style} className="absolute z-20 flex items-center justify-center pointer-events-none text-2xl">
-              {entity.interactionType === 'ITEM' ? '📦' : 
-               entity.interactionType === 'BATTLE' ? '👹' : 
-               entity.id === 'furnace' ? '🔥' : '❓'}
+              {entity.interactionType === 'ITEM' ? '📄' : 
+               entity.interactionType === 'BATTLE' ? '⛔' : 
+               '❓'}
           </div>
       );
   };
@@ -398,7 +438,19 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
     <div className="relative shadow-2xl" style={{ width: mapData.width * TILE_SIZE, height: mapData.height * TILE_SIZE }}>
         {mapData.tiles.map((row, y) => row.map((type, x) => renderTile(type, x, y)))}
         {mapData.entities.map(renderEntity)}
-        <div className={`absolute inset-0 pointer-events-none mix-blend-overlay transition-colors duration-1000 ${isReality ? 'bg-blue-900/10' : 'bg-red-900/20'}`}></div>
+        
+        {/* ATMOSPHERE OVERLAYS */}
+        <div className={`absolute inset-0 pointer-events-none mix-blend-overlay transition-colors duration-1000 ${isReality ? 'bg-cyan-900/10' : 'bg-red-900/30'}`}></div>
+        
+        {/* Steam / Fog for Reality */}
+        {isReality && (
+             <div className="absolute inset-0 pointer-events-none bg-[url('https://media.giphy.com/media/26tP41tqF1T540c4o/giphy.gif')] opacity-10 mix-blend-screen bg-repeat"></div>
+        )}
+
+        {/* Glitch for Inner World */}
+        {!isReality && (
+             <div className="absolute inset-0 pointer-events-none opacity-20" style={{backgroundImage: 'linear-gradient(rgba(255, 0, 0, 0.1) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06))', backgroundSize: '100% 2px, 3px 100%'}}></div>
+        )}
     </div>
   );
 };

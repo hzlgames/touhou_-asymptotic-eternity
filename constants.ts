@@ -46,15 +46,15 @@ export const CHARACTERS: Record<CharacterId, Character> = {
   }
 };
 
-// --- STAGE 1: THE MIRROR DOUBLES ---
+// --- STAGE 1: THE OVERCLOCKED ADMINISTRATOR ---
 const STAGE_1_REIMU: Enemy = {
-    name: 'Greedy Reimu (Mirror)',
+    name: 'Administrator Reimu',
     hp: 3000,
     maxHp: 3000,
-    description: 'A mirror version of Reimu obsessed with money.',
-    visualPrompt: 'Reimu Hakurei as a corrupted greedy shrine maiden, pixel art game sprite. She holds a golden abacus in one hand and overflowing money bags in the other. Her eyes have Yen symbols in them. She wears a dark red and black modified miko outfit with gold coins attached. Cyberpunk glitch effects. Full body, standing pose, isolated on green background.',
-    spellCardName: 'Treasure "Yin-Yang Loot Box"',
-    flavorText: "That's an illegal entry fee! Pay up 100,000 yen!",
+    description: 'A stressed, overworked Reimu who treats reality as a buggy system.',
+    visualPrompt: 'Reimu Hakurei as a cyberpunk system administrator. Anime style. She looks extremely exhausted, dark circles under eyes, messy hair. Wearing a modified miko outfit with ID badges and data cables. Surrounded by floating holographic error windows and red "REJECTED" stamps. Background is a glitched digital shrine.',
+    spellCardName: 'Overwork "Deadline Pressure"',
+    flavorText: "Ticket #404: Anomaly detected. Executing forced deletion.",
     difficulty: 2,
     pixelSpriteUrl: '',
     backgroundUrl: ''
@@ -176,10 +176,10 @@ export const SCENARIOS: Record<CharacterId, Scenario> = {
         id: 'BLUE_CHAPTER',
         title: 'Blue Chapter',
         subtitle: 'The Loss of Eternity',
-        description: 'Search for Eirin in a world where you are slowly becoming mortal. You fear the "Happy Ending".',
+        description: 'Explore the "Admin District" where Reimu enforces absolute order with bureaucratic rage.',
         themeColor: '#0B0B3B',
-        locationName: 'Eientei: Möbius Corridor',
-        locationVisualPrompt: 'Anime background art of a long, dark traditional Japanese wooden corridor in Eientei at night. Surreal atmosphere, infinite loop, blue moonlight streaming through shoji screens. Dust motes in the air. High quality, Makoto Shinkai style.',
+        locationName: 'Admin District: Route 404',
+        locationVisualPrompt: 'Anime background art of the Hakurei Shrine path converted into a high-tech bureaucratic construction site. Yellow caution tape everywhere. Numbered trees. White steam rising. Fluorescent lighting. Oppressive atmosphere.',
         enemies: [
             STAGE_1_REIMU,
             STAGE_2_MOKOU_ILLUSION,

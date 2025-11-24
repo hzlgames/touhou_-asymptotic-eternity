@@ -102,21 +102,21 @@ export enum TileType {
   LOCKED_DOOR = 7,
   PILLAR = 8,
   
-  // Advanced Puzzle Tiles
-  LANTERN = 9,     
+  // Advanced Puzzle Tiles (Renamed/remapped conceptually for new theme)
+  LANTERN = 9,     // Now: Terminal Node
   SEAL = 10,       
-  WATER = 11,
-  BRIDGE = 12,
-  BOOKSHELF = 13,
-  FURNACE = 14,
-  STATUE = 15,
+  WATER = 11,      // Now: Data Stream
+  BRIDGE = 12,     // Now: Debug Bridge
+  BOOKSHELF = 13,  // Now: Server Rack/File Cabinet
+  FURNACE = 14,    // Now: Shredder
+  STATUE = 15,     // Now: Surveillance Drone
   ASHES = 16,
 
   // Kaguya Route Specific
-  GOLD_FLOOR = 17,
+  GOLD_FLOOR = 17, // Now: Caution Tape Floor
   CHARM_WALL = 18,
   MOON_GATE = 19,
-  PAINTING = 20,
+  PAINTING = 20,   // Now: Compliance Poster
   SECRET_DOOR = 21
 }
 
@@ -136,7 +136,7 @@ export interface MapTrigger {
 
 export interface InteractionHelpers {
     setFlag: (f: string) => void;
-    removeFlag: (f: string) => void; // New helper
+    removeFlag: (f: string) => void;
     hasFlag: (f: string) => boolean;
     addItem: (id: string, name: string) => void;
     hasItem: (id: string) => boolean;

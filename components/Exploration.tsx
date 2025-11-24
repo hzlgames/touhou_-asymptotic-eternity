@@ -32,8 +32,8 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   // --- INITIALIZATION ---
   const handleReimuEncounter = useCallback(() => {
      setDialogue({
-         title: "Greedy Reimu (Mirror)",
-         text: "Hold it right there! You didn't think you could enter the Inner Sanctum without paying the entry fee, did you? Look at all this money! It's MINE!"
+         title: "Administrator Reimu",
+         text: "Ticket #404: Unauthorized Entity detected in Sector 1. I don't have time for this... I have 3,000 pending incidents to resolve before 5 PM. You are a Bug. I am deleting you."
      });
   }, []);
 
@@ -311,8 +311,8 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
         {/* UI HUD */}
         <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
-            <h1 className="text-xl text-white bg-black/60 px-4 py-2 border-l-4 border-blue-500">
-                Stage 1: Eientei
+            <h1 className="text-xl text-white bg-black/60 px-4 py-2 border-l-4 border-blue-500 font-mono">
+                SECTOR 1: PROCESSING LANE
             </h1>
             
             <div className="flex items-center gap-2 bg-black/60 px-4 py-2 rounded-r-lg">
@@ -328,14 +328,14 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             </div>
             
             <div className="text-xs text-gray-400 mt-1 font-mono">
-                [SPACE] Lens: {worldType}
+                [SPACE] LENS: {worldType}
             </div>
         </div>
 
         {/* LOOP NOTIFICATION */}
         {loopMessage && (
             <div className="absolute top-32 left-1/2 -translate-x-1/2 z-50 animate-pulse">
-                <div className="bg-red-900/80 border-y-2 border-[#FFD700] text-[#FFD700] px-8 py-2 font-bold tracking-[0.5em] shadow-[0_0_20px_red]">
+                <div className="bg-red-900/80 border-y-2 border-[#FFD700] text-[#FFD700] px-8 py-2 font-bold tracking-[0.5em] shadow-[0_0_20px_red] font-mono">
                     {loopMessage}
                 </div>
             </div>
@@ -344,14 +344,14 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         {/* OBJECTIVE HUD */}
         <div className="absolute top-4 right-4 z-50">
             <div className="bg-black/80 border border-[#FFD700] p-3 rounded text-white min-w-[200px]">
-                <h3 className="text-[#FFD700] text-xs font-bold uppercase tracking-widest mb-1 border-b border-gray-700 pb-1">Current Objective</h3>
-                <p className="text-sm font-serif italic">{mapData.objectiveText}</p>
+                <h3 className="text-[#FFD700] text-xs font-bold uppercase tracking-widest mb-1 border-b border-gray-700 pb-1">Current Protocol</h3>
+                <p className="text-sm font-mono text-green-400">{mapData.objectiveText}</p>
                 {inventory.size > 0 && (
                      <div className="mt-2 pt-2 border-t border-gray-700">
-                         <div className="text-xs text-gray-500">Inventory:</div>
+                         <div className="text-xs text-gray-500">CACHE:</div>
                          <div className="flex gap-1 flex-wrap mt-1">
                              {Array.from(inventory).map((item, i) => (
-                                 <span key={i} className="text-xs bg-blue-900/50 px-1 border border-blue-500 rounded">{item}</span>
+                                 <span key={i} className="text-xs bg-blue-900/50 px-1 border border-blue-500 rounded font-mono">{item}</span>
                              ))}
                          </div>
                      </div>
@@ -376,7 +376,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                          <img src={character.portraitUrl} className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 flex flex-col">
-                        <h3 className="text-[#FFD700] text-lg mb-2 font-bold tracking-wider">{dialogue.title}</h3>
+                        <h3 className="text-[#FFD700] text-lg mb-2 font-bold tracking-wider font-mono">{dialogue.title}</h3>
                         <p className="text-white text-xl leading-relaxed font-serif">{dialogue.text}</p>
                         
                         <div className="mt-auto flex justify-end pt-4">
@@ -397,7 +397,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         <div className={`absolute inset-0 pointer-events-none transition-all duration-700 z-40
             ${worldType === 'INNER_WORLD' 
                 ? 'shadow-[inset_0_0_100px_rgba(255,0,0,0.5)] backdrop-contrast-125 backdrop-hue-rotate-15' 
-                : 'shadow-[inset_0_0_150px_rgba(0,0,0,0.8)] backdrop-brightness-75'
+                : 'shadow-[inset_0_0_150px_rgba(0,0,0,0.8)] backdrop-grayscale-[0.3]'
             }
         `} />
         
