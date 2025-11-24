@@ -50,7 +50,7 @@ export const getStage1Data = (
   else if (!hasKey) objectiveText = "Access the Archive Room. Incinerate the 'Corrupt Data' to find the admin key.";
   else if (!statuesCorrect) objectiveText = "The Security Drones are watching. Align their vision with the glitches.";
   else if (!paintingTorn) objectiveText = "Infinite Redirect Loop detected. Find the anomaly in the Compliance Posters.";
-  else objectiveText = "Loop terminated. Enter the Debug Backdoor.";
+  else objectiveText = "Loop terminated. The texture of reality is peeling off. Enter the Breach.";
 
   // --- 1. BUILD GEOMETRY ---
   for (let y = 0; y < MAP_HEIGHT; y++) {
@@ -133,7 +133,7 @@ export const getStage1Data = (
                       setFlag(id);
                       alert("TERMINAL: Access Authorized. Debug bridge compilation started.");
                   } else {
-                      alert("TERMINAL: System Normal.");
+                      alert("TERMINAL: System Normal. No irregularities found.");
                   }
               } else {
                   alert("ERROR: Hardware interaction required in Physical Layer.");
@@ -151,6 +151,15 @@ export const getStage1Data = (
       });
   }
 
+  // **STORY ITEM: Eirin's Terminal**
+  entities.push({
+      id: 'eirin_log', x: 4, y: 27,
+      name: 'Encrypted Tablet', color: '#888', interactionType: 'READ', isSolid: true, visibleIn: WorldType.REALITY,
+      onInteract: () => {
+          alert("LOG ENTRY #901 [Author: E. Yagokoro]\nSubject: Reimu Hakurei.\nObservation: In this mirror dimension, her 'laziness' variable has been inverted. The result is a hyper-efficient machine that views organic life as 'inefficiency'.\nConclusion: A perfect world is a dead world. Kaguya must realize this.");
+      }
+  });
+
   entities.push({
       id: 'furnace', x: 7, y: 12,
       name: 'System Recycler', color: '#555', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
@@ -159,13 +168,13 @@ export const getStage1Data = (
               if (bookBurned) alert("RECYCLER: Empty.");
               else if (hasItem('Error Log')) {
                    setFlag('BOOK_BURNED');
-                   alert("You drag the 'Error Log' into the Recycle Bin. It dissolves into binary dust.");
+                   alert("You drag the 'Error Log' into the Recycle Bin. It dissolves into binary dust, revealing a hidden keycode in the hex dump.");
               } else alert("RECYCLER: Awaiting corrupted data input.");
           } else {
               if (bookBurned && !inventory.has('Archive Key')) {
                   addItem('Archive Key', 'Admin Key');
                   alert("Recovered 'Admin Key' from deleted file metadata!");
-              } else alert("A secure data shredder.");
+              } else alert("A secure data shredder. It hums with the sound of a thousand deleted files.");
           }
       }
   });
@@ -204,7 +213,7 @@ export const getStage1Data = (
           id: `ghost_${s.id}`, x: s.x, y: s.y,
           name: 'Glitch Phantom', color: '#00ffff', interactionType: 'DIALOGUE', isSolid: true, visibleIn: WorldType.INNER_WORLD,
           rotation: s.correct, 
-          onInteract: () => alert("The glitch points towards a vector...")
+          onInteract: () => alert("The phantom whispers: 'The Admin watches... this way...'")
       });
   });
 
@@ -219,9 +228,9 @@ export const getStage1Data = (
             onInteract: ({ worldType, setFlag }) => {
                 if (worldType === WorldType.INNER_WORLD) {
                     setFlag('PAINTING_TORN');
-                    alert("You rip down the 'OBEY' poster. Behind it lies a developer backdoor.");
+                    alert("You rip down the 'OBEY' poster. The wall behind it is untextured—a developer backdoor into the core.");
                 } else {
-                    alert("A poster that reads: 'REPORT BUGS IMMEDIATELY'. It hangs crooked.");
+                    alert("A poster that reads: 'REPORT BUGS IMMEDIATELY'. It hangs crooked, as if hiding a secret.");
                 }
             }
         });
@@ -293,8 +302,11 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
     }
     if (type === TileType.SECRET_DOOR) {
         return (
-            <div key={`${x}-${y}`} style={style} className="bg-black border-2 border-dashed border-green-500 z-0 flex items-center justify-center">
-                 <div className="text-xs text-green-500 font-mono animate-pulse">BACKDOOR</div>
+            <div key={`${x}-${y}`} style={style} className="bg-black border-2 border-dashed border-green-500 z-0 flex items-center justify-center relative overflow-hidden">
+                 <div className="absolute inset-0 bg-green-900/20 animate-pulse"></div>
+                 <div className="text-xs text-green-500 font-mono animate-pulse z-10 relative text-center">
+                    SYSTEM<br/>BREACH
+                 </div>
             </div>
         );
     }
@@ -396,6 +408,16 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
             <div key={entity.id} style={style} className="absolute z-20 flex items-center justify-center pointer-events-none">
                 <div className="w-12 h-12 bg-gray-700 rounded-sm border-t-4 border-black flex items-center justify-center">
                     <span className="text-xl">🗑️</span>
+                </div>
+            </div>
+          );
+      }
+
+      if (entity.id === 'eirin_log') {
+          return (
+            <div key={entity.id} style={style} className="absolute z-20 flex items-center justify-center pointer-events-none">
+                <div className="w-10 h-8 bg-blue-900 border border-blue-400 rounded flex items-center justify-center shadow-[0_0_10px_blue]">
+                    <div className="text-[8px] text-blue-200 font-mono">LOG</div>
                 </div>
             </div>
           );

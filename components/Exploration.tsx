@@ -33,7 +33,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   const handleReimuEncounter = useCallback(() => {
      setDialogue({
          title: "Administrator Reimu",
-         text: "Ticket #404: Unauthorized Entity detected in Sector 1. I don't have time for this... I have 3,000 pending incidents to resolve before 5 PM. You are a Bug. I am deleting you."
+         text: "Unregistered Entity 'Kaguya Houraisan'. Your 'Eternity' parameter violates the static memory allocation of this sector. I don't have time for tea or duels. I have a deadline. Executing forced deletion..."
      });
   }, []);
 
