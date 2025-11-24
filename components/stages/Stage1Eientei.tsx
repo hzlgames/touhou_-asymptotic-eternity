@@ -9,7 +9,7 @@ const MAP_WIDTH = 40;
 const MAP_HEIGHT = 50;
 
 // The Loop
-const LOOP_TRIGGER_Y = 14; // Moved down slightly to fit Torii
+const LOOP_TRIGGER_Y = 14; 
 const LOOP_RESET_Y = 24;
 
 export const getStage1Data = (
@@ -150,21 +150,21 @@ export const getStage1Data = (
   
   // 1. Digital Torii Gate (Entrance to Boss Room)
   entities.push({
-      id: 'digital_torii', x: 20, y: 9,
+      id: 'digital_torii', x: 20, y: 11, // Moved down slightly
       name: 'Digital Torii', color: 'blue', interactionType: 'READ', isSolid: false, visibleIn: 'BOTH',
       onInteract: () => alert("PROTOCOL GATEWAY: Enter to submit Ticket #001.")
   });
 
-  // 2. The Shrine Office (Background)
+  // 2. The Shrine Office (Background) - Positioned BEHIND Reimu
   entities.push({
-      id: 'shrine_desk', x: 20, y: 2,
+      id: 'shrine_desk', x: 20, y: 1, // High up to act as backdrop
       name: 'Shrine Office', color: 'red', interactionType: 'READ', isSolid: true, visibleIn: 'BOTH',
       onInteract: () => alert("The nerve center of Gensokyo's Reality Layer. It smells like ozone and old tea.")
   });
 
   // 3. The Shredder (Donation Box)
   entities.push({
-      id: 'shredder', x: 24, y: 4,
+      id: 'shredder', x: 25, y: 5,
       name: 'Donation Shredder', color: 'gray', interactionType: 'READ', isSolid: true, visibleIn: 'BOTH',
       onInteract: () => alert(isReality ? "A donation box modified into a paper shredder. It's aggressively chewing on a 'Feature Request' form." : "THE MAW. IT HUNGERS FOR DATA.")
   });
@@ -491,23 +491,28 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
           height: TILE_SIZE,
       };
 
-      // --- NEW: DIGITAL TORII ---
+      // --- NEW: DIGITAL TORII (Visual Overhaul) ---
       if (entity.name === 'Digital Torii') {
           const sprite = propSprites['PROP_DIGITAL_TORII'];
+          const visualWidth = TILE_SIZE * 6; // 384px wide
+          const visualHeight = TILE_SIZE * 6;
+          
           return (
-              <div key={entity.id} style={style} className="absolute z-30 flex justify-center items-end pointer-events-none">
-                  {/* Oversized rendering */}
-                  <div className="w-[300px] h-[300px] flex items-end justify-center -translate-y-4">
+              <div key={entity.id} style={style} className="absolute z-[40] flex justify-center items-end pointer-events-none">
+                  {/* Oversized rendering container */}
+                  <div 
+                    style={{ width: visualWidth, height: visualHeight }}
+                    className="flex items-end justify-center -translate-y-[80px]"
+                  >
                       {sprite ? (
                           <img 
                             src={sprite} 
-                            className={`w-full h-full object-contain drop-shadow-[0_0_15px_blue] ${!isReality ? 'hue-rotate-[140deg] brightness-75 contrast-125' : ''}`}
+                            className={`w-full h-full object-contain drop-shadow-[0_0_25px_rgba(0,100,255,0.5)] ${!isReality ? 'hue-rotate-[140deg] brightness-75 contrast-150' : ''}`}
                             alt="Torii" 
                           />
                       ) : (
-                          // Fallback
-                          <div className="w-[200px] h-[150px] border-x-8 border-t-8 border-blue-500 relative">
-                               <div className="absolute top-4 -left-4 w-[220px] h-4 bg-blue-400"></div>
+                          <div className="w-full h-[80%] border-x-[20px] border-t-[20px] border-blue-500 relative flex justify-center">
+                               <div className="absolute top-10 w-[120%] h-8 bg-blue-400 shadow-[0_0_10px_cyan]"></div>
                           </div>
                       )}
                   </div>
@@ -515,21 +520,28 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
           )
       }
 
-      // --- NEW: SHRINE OFFICE DESK ---
+      // --- NEW: SHRINE OFFICE DESK (Visual Overhaul) ---
       if (entity.name === 'Shrine Office') {
           const sprite = propSprites['PROP_SHRINE_OFFICE'];
+          const visualWidth = TILE_SIZE * 10; // 640px wide
+          const visualHeight = TILE_SIZE * 8; // 512px tall
+
           return (
-              <div key={entity.id} style={style} className="absolute z-10 flex justify-center pointer-events-none">
-                  <div className="w-[500px] h-[400px] flex items-center justify-center -translate-y-16">
+              <div key={entity.id} style={style} className="absolute z-[15] flex justify-center pointer-events-none">
+                  <div 
+                    style={{ width: visualWidth, height: visualHeight }}
+                    className="flex items-center justify-center -translate-y-[100px]"
+                  >
                       {sprite ? (
                           <img 
                             src={sprite} 
-                            className={`w-full h-full object-contain ${!isReality ? 'hue-rotate-[180deg] sepia contrast-125' : ''}`}
+                            className={`w-full h-full object-contain ${!isReality ? 'hue-rotate-[180deg] sepia contrast-150' : ''}`}
                             alt="Shrine Desk" 
                           />
                       ) : (
-                          <div className="w-[300px] h-[200px] bg-gray-800 border-4 border-white flex items-center justify-center text-white">
-                              ADMIN DESK
+                          <div className="w-full h-1/2 bg-gray-900 border-4 border-white flex flex-col items-center justify-center text-white">
+                              <h1 className="text-4xl font-serif mb-4">ADMINISTRATION</h1>
+                              <div className="w-3/4 h-2 bg-red-600 animate-pulse"></div>
                           </div>
                       )}
                   </div>
@@ -537,24 +549,31 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
           )
       }
 
-      // --- NEW: SHREDDER ---
+      // --- NEW: SHREDDER (Visual Overhaul) ---
       if (entity.name === 'Donation Shredder') {
           const sprite = propSprites['PROP_SHREDDER'];
+          const visualWidth = TILE_SIZE * 2.5; 
+          
           return (
               <div key={entity.id} style={style} className="absolute z-20 flex justify-center pointer-events-none">
-                   <div className="w-full h-[96px] -translate-y-8 flex items-end justify-center">
+                   <div 
+                        style={{ width: visualWidth, height: visualWidth }}
+                        className="flex items-end justify-center -translate-y-8"
+                   >
                         {sprite ? (
                             <img 
                                 src={sprite} 
-                                className={`h-full object-contain ${!isReality ? 'animate-pulse drop-shadow-[0_0_10px_red]' : ''}`}
+                                className={`h-full object-contain ${!isReality ? 'animate-pulse drop-shadow-[0_0_15px_red]' : ''}`}
                                 alt="Shredder" 
                             />
                         ) : (
-                            <div className="w-12 h-12 bg-red-900 border-2 border-white"></div>
+                            <div className="w-full h-full bg-red-900 border-4 border-white flex items-center justify-center">
+                                ⚙️
+                            </div>
                         )}
                    </div>
                    {/* Paper particles effect if Inner World */}
-                   {!isReality && <div className="absolute -top-4 w-1 h-1 bg-white animate-ping"></div>}
+                   {!isReality && <div className="absolute -top-10 w-2 h-2 bg-white animate-ping"></div>}
               </div>
           )
       }
@@ -567,14 +586,14 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
                    {sprite ? (
                        <img 
                             src={sprite} 
-                            className={`w-full h-full object-contain scale-125 ${!isReality ? 'brightness-50 grayscale border-red-500' : ''}`}
+                            className={`w-[128px] h-[128px] max-w-none object-contain -translate-y-8 ${!isReality ? 'brightness-50 grayscale border-red-500' : ''}`}
                             alt="Reimu" 
                        />
                    ) : (
-                       <div className="w-10 h-10 bg-red-500 rounded-full border-2 border-white"></div>
+                       <div className="w-16 h-16 bg-red-500 rounded-full border-4 border-white animate-bounce"></div>
                    )}
                    {/* Floating "Busy" Status */}
-                   <div className="absolute -top-8 bg-black/80 text-white text-[8px] px-2 py-1 rounded font-mono animate-bounce border border-red-500 whitespace-nowrap">
+                   <div className="absolute -top-12 bg-black/80 text-white text-[10px] px-3 py-1 rounded font-mono animate-bounce border border-red-500 whitespace-nowrap z-30">
                        STATUS: {isReality ? 'COMPILING...' : 'PURGING...'}
                    </div>
                </div>
@@ -587,20 +606,20 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
           const treeIdNum = entity.id.split('_').pop()?.padStart(3, '0') || '000';
           
           return (
-               <div key={entity.id} style={style} className="absolute z-20 -top-16 w-full h-[128px] pointer-events-none flex justify-center">
+               <div key={entity.id} style={style} className="absolute z-30 -top-24 w-[128px] h-[192px] -left-8 pointer-events-none flex justify-center">
                    {sprite ? (
                        <img 
                             src={sprite} 
-                            className={`h-full object-contain ${!isReality ? 'grayscale brightness-50 contrast-150' : ''}`}
+                            className={`w-full h-full object-contain ${!isReality ? 'grayscale brightness-50 contrast-150' : ''}`}
                             alt="Tree" 
                        />
                    ) : (
-                       <div className="w-full h-full flex items-end justify-center pb-4 text-[10px] text-red-500 font-mono animate-pulse">
-                           [ASSET MISSING]
+                       <div className="w-full h-full flex items-end justify-center pb-4 text-[10px] text-green-500 font-mono border-l border-green-900/50">
+                           
                        </div>
                    )}
-                   <div className="absolute bottom-8 bg-white border border-black text-[6px] font-mono px-1 shadow-[0_0_5px_white] rotate-12">
-                      ID: {treeIdNum}
+                   <div className="absolute bottom-8 bg-black border border-green-500 text-green-500 text-[8px] font-mono px-1 shadow-[0_0_5px_green] rotate-90 origin-bottom-left">
+                      ID:{treeIdNum}
                    </div>
                </div>
           );
@@ -610,7 +629,7 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
       if (entity.name === 'Gohei Barrier') {
           const sprite = propSprites['PROP_GOHEI'];
           return (
-               <div key={entity.id} style={style} className="absolute z-20 -top-8 w-full h-[96px] pointer-events-none flex justify-center items-end">
+               <div key={entity.id} style={style} className="absolute z-20 -top-16 w-full h-[128px] pointer-events-none flex justify-center items-end">
                    {sprite ? (
                        <img 
                             src={sprite} 
