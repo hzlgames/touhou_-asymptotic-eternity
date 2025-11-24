@@ -136,6 +136,7 @@ export interface MapTrigger {
 
 export interface InteractionHelpers {
     setFlag: (f: string) => void;
+    removeFlag: (f: string) => void; // New helper
     hasFlag: (f: string) => boolean;
     addItem: (id: string, name: string) => void;
     hasItem: (id: string) => boolean;

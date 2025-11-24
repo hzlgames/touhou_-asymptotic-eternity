@@ -27,37 +27,30 @@ export const getStage1Data = (
   // -- PUZZLE STATE CHECKERS --
   const lanternsLit = flags.has('LANTERN_L') && flags.has('LANTERN_R');
   const bookBurned = flags.has('BOOK_BURNED');
+  const paintingTorn = flags.has('PAINTING_TORN');
   const hasKey = inventory.has('Archive Key');
   
-  // Statue Rotation State (Derived from flags for persistence)
-  // Format: STATUE_{ID}_ROT_{0-3}
+  // Statue Rotation Helper
   const getRotation = (id: string) => {
       if (flags.has(`${id}_ROT_1`)) return 1;
       if (flags.has(`${id}_ROT_2`)) return 2;
       if (flags.has(`${id}_ROT_3`)) return 3;
-      return 0;
+      return 0; // Default ROT_0
   };
 
-  // Check if statues are correct (Up, Right, Down, Left logic for example)
-  // Puzzle Solution:
-  // NE Statue: Ghost looks DOWN (2)
-  // NW Statue: Ghost looks RIGHT (1)
-  // SE Statue: Ghost looks LEFT (3)
-  // SW Statue: Ghost looks UP (0)
   const statuesCorrect = 
       getRotation('STATUE_NE') === 2 &&
       getRotation('STATUE_NW') === 1 &&
       getRotation('STATUE_SE') === 3 &&
       getRotation('STATUE_SW') === 0;
 
-  const loopBroken = hasKey && statuesCorrect;
-
   // Objective Logic
   let objectiveText = "Explore the courtyard.";
   if (!lanternsLit) objectiveText = "The river of blood blocks the way. Light the lanterns in reality.";
   else if (!hasKey) objectiveText = "Search the West Archives. Burn the past to find the key.";
   else if (!statuesCorrect) objectiveText = "The East Hall Statues whisper. Match the gaze of the dead.";
-  else objectiveText = "The loop is broken. Proceed North.";
+  else if (!paintingTorn) objectiveText = "The path ahead is infinite. Search for a discrepancy in the Reality paintings.";
+  else objectiveText = "The loop is broken. Enter the secret passage behind the painting.";
 
   // --- 1. BUILD GEOMETRY ---
   for (let y = 0; y < MAP_HEIGHT; y++) {
@@ -73,13 +66,8 @@ export const getStage1Data = (
           
           // The River (y: 34-36)
           if (y >= 34 && y <= 36) {
-              tile = TileType.WATER; // Default solid water
-              
-              // BRIDGE MECHANIC:
-              // If lanterns lit AND we are in Inner World, specific spots become bridges
-              if (lanternsLit && !isReality) {
-                  if (x === 15 || x === 25) tile = TileType.BRIDGE;
-              }
+              tile = TileType.WATER; 
+              if (lanternsLit && !isReality && (x === 15 || x === 25)) tile = TileType.BRIDGE;
           }
       }
 
@@ -93,11 +81,7 @@ export const getStage1Data = (
           tile = TileType.FLOOR;
           if (x === 2 || x === 12 || y === 10 || y === 28) tile = TileType.WALL;
           if (x === 12 && y === 24) tile = TileType.FLOOR; // Doorway
-          
-          // Bookshelves
-          if (tile === TileType.FLOOR && x > 3 && x < 11 && y % 3 === 0) {
-              tile = TileType.BOOKSHELF;
-          }
+          if (tile === TileType.FLOOR && x > 3 && x < 11 && y % 3 === 0) tile = TileType.BOOKSHELF;
       }
 
       // 4. EAST STATUE HALL (x: 28-38, y: 10-28)
@@ -108,12 +92,22 @@ export const getStage1Data = (
       }
 
       // 5. NORTH CORRIDOR & BOSS (x: 18-22, y: 0-20)
+      // The "Looping" Main Path
       if (x >= 18 && x <= 22 && y < 20) {
           tile = TileType.FLOOR;
-          if (x === 18 || x === 22) tile = TileType.WALL; // Walls
+          if (x === 18 || x === 22) tile = TileType.WALL;
       }
 
-      // 6. BOSS ROOM (y: 0-5)
+      // 6. SECRET PATH (x: 23, y: 5-20)
+      // Only accessible if painting is torn
+      if (paintingTorn) {
+          if (x === 23 && y >= 5 && y <= 20) {
+              tile = TileType.PATH; // Visual distinction
+              if (x === 23 && y === 20) tile = TileType.SECRET_DOOR;
+          }
+      }
+
+      // 7. BOSS ROOM (y: 0-5)
       if (y <= 5 && x >= 15 && x <= 25) {
            tile = TileType.FLOOR;
       }
@@ -126,7 +120,6 @@ export const getStage1Data = (
   // --- 2. ENTITIES & PUZZLES ---
 
   // === GARDEN PUZZLE ===
-  // Lanterns (Reality Only interact)
   ['LANTERN_L', 'LANTERN_R'].forEach((id, idx) => {
       const lx = idx === 0 ? 14 : 26;
       entities.push({
@@ -139,8 +132,6 @@ export const getStage1Data = (
                   if (!flags.has(id)) {
                       setFlag(id);
                       alert("You light the lantern. The flame is weak, but it casts a strange shadow.");
-                  } else {
-                      alert("The lantern is already lit.");
                   }
               } else {
                   alert("A spiritual flame burns here, hardening the blood nearby.");
@@ -150,121 +141,97 @@ export const getStage1Data = (
   });
 
   // === ARCHIVE PUZZLE ===
-  // 1. Dusty Book (Reality, hidden in shelf)
   if (!inventory.has('Dusty Book') && !bookBurned) {
       entities.push({
           id: 'dusty_book', x: 6, y: 15, 
           name: 'Dusty Shelf', color: 'transparent', interactionType: 'ITEM', isSolid: false, visibleIn: WorldType.REALITY,
-          onInteract: ({ addItem }) => {
-              addItem('Dusty Book', 'Dusty Book');
-              alert("You found a book covered in thick dust. It's the only one with writing.");
-          }
+          onInteract: ({ addItem }) => addItem('Dusty Book', 'Dusty Book')
       });
   }
 
-  // 2. Furnace (Inner World Only)
   entities.push({
       id: 'furnace', x: 7, y: 12,
       name: 'Cursed Furnace', color: '#aa0000', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
       onInteract: ({ hasItem, setFlag, worldType, addItem }) => {
           if (worldType === WorldType.INNER_WORLD) {
-              if (bookBurned) {
-                   alert("The fire has died down. Ashes remain.");
-              } else if (hasItem('Dusty Book')) {
+              if (bookBurned) alert("The fire has died down. Ashes remain.");
+              else if (hasItem('Dusty Book')) {
                    setFlag('BOOK_BURNED');
                    alert("You throw the book into the cursed fire. It screams as it burns to ash.");
-              } else {
-                   alert("A hungry fire. It demands knowledge.");
-              }
+              } else alert("A hungry fire. It demands knowledge.");
           } else {
-              // Reality: Check Ashes
               if (bookBurned && !inventory.has('Archive Key')) {
                   addItem('Archive Key', 'Archive Key');
                   alert("You sift through the cold ashes in the real world... You found a metal key!");
-              } else {
-                  alert("A cold stone fireplace.");
-              }
+              } else alert("A cold stone fireplace.");
           }
       }
   });
 
-  // === STATUE PUZZLE ===
+  // === STATUE PUZZLE (ROTATION LOGIC IMPROVED) ===
   const statueConfig = [
-      { id: 'STATUE_NW', x: 30, y: 14, correct: 1 }, // Right
-      { id: 'STATUE_NE', x: 36, y: 14, correct: 2 }, // Down
-      { id: 'STATUE_SW', x: 30, y: 20, correct: 0 }, // Up
-      { id: 'STATUE_SE', x: 36, y: 20, correct: 3 }, // Left
+      { id: 'STATUE_NW', x: 30, y: 14, correct: 1 }, 
+      { id: 'STATUE_NE', x: 36, y: 14, correct: 2 }, 
+      { id: 'STATUE_SW', x: 30, y: 20, correct: 0 }, 
+      { id: 'STATUE_SE', x: 36, y: 20, correct: 3 }, 
   ];
 
   statueConfig.forEach(s => {
       const currentRot = getRotation(s.id);
       
-      // Reality: The Statue Entity
+      // Reality: Click to Rotate
       entities.push({
           id: s.id, x: s.x, y: s.y,
           name: 'Rabbit Statue', color: '#888', interactionType: 'PUZZLE', isSolid: true, visibleIn: WorldType.REALITY,
           rotation: currentRot,
-          onInteract: ({ setFlag }) => {
-              // Cycle Rotation 0->1->2->3->0
+          onInteract: ({ setFlag, removeFlag }) => {
+              // Calculate next rotation
               const nextRot = (currentRot + 1) % 4;
-              // Clear old
-              // NOTE: In a real app we'd have removeFlag, here we just set new valid one and ignore old
+              // Remove ALL previous rotation flags for this statue
+              removeFlag(`${s.id}_ROT_0`);
+              removeFlag(`${s.id}_ROT_1`);
+              removeFlag(`${s.id}_ROT_2`);
+              removeFlag(`${s.id}_ROT_3`);
+              // Set new flag
               setFlag(`${s.id}_ROT_${nextRot}`);
-              // We can't unset previous flags with current helper, so we check priority in getRotation
-              // To make this work with 'setFlag' only, we rely on the implementation of getRotation checking highest or specific logic
-              // A better hack for this system: we just append flags. getRotation needs to find the *latest* or we just use modulo logic on a counter if we had one.
-              // Since we only have `setFlag`, let's assume we can't unset. 
-              // ACTUALLY: The helper `setFlag` just adds to a Set. 
-              // Workaround: We will use a unique flag for every click? No, that's memory leak.
-              // Let's assume for this game jam, we just add `STATUE_NW_ROT_1`. 
-              // Logic fix: We can't clear flags. So we will rely on the UI/State in Exploration to handle this or just assume the last added flag in the set logic (which Set doesn't guarantee order).
-              // ALTERNATIVE: Use `inventory` or just Alert for now?
-              // Let's implement a 'smart' getRotation logic: We can't.
-              // OKAY, REFACTOR: `Exploration` needs to handle rotation state? 
-              // No, let's just say interacting toggles a visual but for the sake of XML constraints, 
-              // I will use a simple hack: We assume the user cycles correctly.
-              // Wait, I can trigger a `DIALOGUE` that asks "Rotate to which direction?" 
-              const dir = window.prompt("Rotate Statue? (0: Up, 1: Right, 2: Down, 3: Left)", String(nextRot));
-              if (dir && ['0','1','2','3'].includes(dir)) {
-                  // We need to clear old flags. Since we can't, we will use a special flag syntax that Exploration understands?
-                  // Or just accept that we add all flags.
-                  // Let's just use `alert` to tell the player "It is now facing X". 
-                  // And check `STATUE_NW_FACING_RIGHT` etc.
-                  // For this implementation, let's just make it simple: 
-                  // The prompt asks for input. If input matches correct, we set `STATUE_NW_CORRECT`.
-                  if (parseInt(dir) === s.correct) {
-                      setFlag(`${s.id}_CORRECT`);
-                      alert("Click! The statue locks into place.");
-                  } else {
-                      alert("The statue turns, but feels loose.");
-                  }
-              }
           }
       });
 
-      // Inner World: The Ghost Hint
+      // Inner World: Ghost Hint
       entities.push({
           id: `ghost_${s.id}`, x: s.x, y: s.y,
           name: 'Weeping Ghost', color: '#00ffff', interactionType: 'DIALOGUE', isSolid: true, visibleIn: WorldType.INNER_WORLD,
-          rotation: s.correct, // The ghost faces the correct way
-          onInteract: () => alert("The ghost is staring intensely in a specific direction...")
+          rotation: s.correct, 
+          onInteract: () => alert("The ghost stares in a fixed direction...")
       });
   });
 
-  // Override `statuesCorrect` for the hack above
-  const realStatuesCorrect = 
-      flags.has('STATUE_NW_CORRECT') && 
-      flags.has('STATUE_NE_CORRECT') &&
-      flags.has('STATUE_SW_CORRECT') &&
-      flags.has('STATUE_SE_CORRECT');
+  // === LOOP & SECRET DOOR PUZZLE ===
+  
+  // The Painting that hides the secret door
+  if (hasKey && statuesCorrect) {
+    if (!paintingTorn) {
+        entities.push({
+            id: 'secret_painting', x: 22, y: 20, // On the right wall of the corridor entrance
+            name: 'Suspicious Painting', color: '#ff00ff', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
+            onInteract: ({ worldType, setFlag }) => {
+                if (worldType === WorldType.INNER_WORLD) {
+                    setFlag('PAINTING_TORN');
+                    alert("You tear down the Talisman Poster. A cold draft blows from the wall behind it.");
+                } else {
+                    alert("A painting of 'The Great Wave'. It looks slightly askew.");
+                }
+            }
+        });
+    }
+  }
 
-  // === LOOP LOGIC ===
-  if (!hasKey || !realStatuesCorrect) {
-      // Loop Trigger at North Corridor
+  // Loop Trigger Logic: Only active in the main corridor (x=18-22)
+  if (!paintingTorn) {
       for (let x = 18; x <= 22; x++) {
           triggers[`${x},${LOOP_TRIGGER_Y}`] = {
               type: 'TELEPORT', targetX: x, targetY: LOOP_RESET_Y, flashEffect: true,
-              message: "You are lost in the infinite corridor. Solve the mysteries first."
+              message: "The corridor stretches infinitely..."
           };
       }
   }
@@ -300,7 +267,6 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
         height: TILE_SIZE,
     };
 
-    // --- WATER / BLOOD ---
     if (type === TileType.WATER) {
         return (
             <div key={`${x}-${y}`} style={style} className={`transition-colors duration-1000 ${isReality ? 'bg-blue-900/80' : 'bg-red-900 animate-pulse'}`}>
@@ -308,12 +274,24 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
             </div>
         );
     }
-    // --- BRIDGE ---
     if (type === TileType.BRIDGE) {
         return (
             <div key={`${x}-${y}`} style={style} className="bg-red-950 border-x-2 border-red-500 shadow-[0_0_15px_red] z-10">
                 <div className="text-center text-red-500 text-xs mt-2 font-mono">BRIDGE</div>
             </div>
+        );
+    }
+    if (type === TileType.SECRET_DOOR) {
+        return (
+            <div key={`${x}-${y}`} style={style} className="bg-[#1a0505] border-2 border-dashed border-[#FFD700] z-0 flex items-center justify-center">
+                 <div className="text-xs text-[#FFD700]">SECRET</div>
+            </div>
+        );
+    }
+    if (type === TileType.PATH) {
+        // The hidden corridor floor
+        return (
+            <div key={`${x}-${y}`} style={style} className="bg-[#1a0505] shadow-inner"></div>
         );
     }
 
@@ -362,7 +340,6 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
           height: TILE_SIZE,
       };
 
-      // LANTERN
       if (entity.id.includes('LANTERN')) {
           const isLit = entity.color === '#ffaa00';
           return (
@@ -374,8 +351,17 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
               </div>
           );
       }
+      
+      if (entity.id === 'secret_painting') {
+          return (
+            <div key={entity.id} style={style} className="absolute z-20 flex items-center justify-center pointer-events-none">
+                <div className={`w-12 h-16 bg-white border-4 border-yellow-600 shadow-md ${!isReality ? 'animate-pulse border-red-500' : ''}`}>
+                    {!isReality ? <span className="text-red-600 text-xs font-bold p-1">SEAL</span> : <span className="text-blue-900 text-xs">ART</span>}
+                </div>
+            </div>
+          );
+      }
 
-      // STATUE / GHOST (Rotation)
       if (entity.name.includes('Statue') || entity.name.includes('Ghost')) {
           const rotDeg = (entity.rotation || 0) * 90;
           return (
@@ -391,7 +377,6 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
                       ) : (
                           <div className="text-2xl">🐰</div>
                       )}
-                      {/* Direction Indicator */}
                       <div className="absolute -top-4 text-xs font-bold text-white bg-black/50 px-1">
                            {['UP','RIGHT','DOWN','LEFT'][entity.rotation || 0]}
                       </div>
@@ -400,7 +385,6 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
           );
       }
       
-      // Default
       return (
           <div key={entity.id} style={style} className="absolute z-20 flex items-center justify-center pointer-events-none text-2xl">
               {entity.interactionType === 'ITEM' ? '📦' : 
@@ -414,8 +398,6 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
     <div className="relative shadow-2xl" style={{ width: mapData.width * TILE_SIZE, height: mapData.height * TILE_SIZE }}>
         {mapData.tiles.map((row, y) => row.map((type, x) => renderTile(type, x, y)))}
         {mapData.entities.map(renderEntity)}
-        
-        {/* Overlay Effects */}
         <div className={`absolute inset-0 pointer-events-none mix-blend-overlay transition-colors duration-1000 ${isReality ? 'bg-blue-900/10' : 'bg-red-900/20'}`}></div>
     </div>
   );

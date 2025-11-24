@@ -10,6 +10,8 @@ interface ExplorationProps {
   backgroundUrl?: string;
 }
 
+const MOVEMENT_SPEED_MS = 200; // Time to move one tile
+
 const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, onEncounter, backgroundUrl }) => {
   // --- ENGINE STATE ---
   const [worldType, setWorldType] = useState<WorldType>(WorldType.REALITY);
@@ -19,8 +21,8 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   const [mapData, setMapData] = useState<MapData | null>(null);
   
   // Physics & FX
-  const [playerPos, setPlayerPos] = useState({ x: 0, y: 0 });
-  const [isWalking, setIsWalking] = useState(false);
+  const [playerGridPos, setPlayerGridPos] = useState({ x: 0, y: 0 }); // Logical Grid Position
+  const [isMoving, setIsMoving] = useState(false); // Lock input during movement animation
   const [direction, setDirection] = useState(1);
   const [interactionTarget, setInteractionTarget] = useState<MapEntity | null>(null);
   const [dialogue, setDialogue] = useState<{title: string, text: string, choices?: string[]} | null>(null);
@@ -35,25 +37,26 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
      });
   }, []);
 
-  // Load Map Logic when flags OR WORLDTYPE change
-  // This is crucial for the "Water -> Bridge" puzzle. 
-  // When worldType changes, we regenerate the grid so tiles become walkable.
-  useEffect(() => {
-    const data = getStage1Data(
+  const loadMap = useCallback(() => {
+      const data = getStage1Data(
         flags, 
         inventory,
         handleReimuEncounter,
         worldType 
     );
     setMapData(data);
-    
-    // Set spawn only on first load
-    if (playerPos.x === 0 && playerPos.y === 0) {
-        setPlayerPos(data.spawnPoint);
-    }
-  }, [flags, inventory, handleReimuEncounter, worldType]); 
+    return data;
+  }, [flags, inventory, handleReimuEncounter, worldType]);
 
-  // --- INPUT & GAME LOOP ---
+  // Initial Load
+  useEffect(() => {
+    const data = loadMap();
+    if (playerGridPos.x === 0 && playerGridPos.y === 0) {
+        setPlayerGridPos(data.spawnPoint);
+    }
+  }, [loadMap]); // Dependency on loadMap handles re-renders on flag changes
+
+  // --- INPUT & MOVEMENT LOGIC ---
   const keysRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -85,7 +88,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
-    // GAME LOOP
+    // GAME LOOP (Input Polling)
     const loop = setInterval(() => {
         if (!mapData || dialogue) return;
 
@@ -94,7 +97,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
         // 1. Sanity Drain
         if (worldType === WorldType.INNER_WORLD) {
-            setSanity(prev => Math.max(0, prev - 0.05)); // Slower drain for exploration
+            setSanity(prev => Math.max(0, prev - 0.05)); 
              if (sanity <= 0) {
                  setWorldType(WorldType.REALITY);
                  setDialogue({ title: "Sanity Depleted", text: "The chaotic waves of the Inner World are too strong. You are forced back to reality." });
@@ -103,40 +106,39 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             setSanity(prev => Math.min(100, prev + 0.3));
         }
 
-        // 2. Movement
-        let dx = 0;
-        let dy = 0;
-        const speed = 0.15; // Slightly faster for better feel
+        // 2. Movement (Grid Based)
+        if (!isMoving) {
+            let dx = 0;
+            let dy = 0;
 
-        if (keysRef.current['ArrowUp'] || keysRef.current['w']) dy = -speed;
-        if (keysRef.current['ArrowDown'] || keysRef.current['s']) dy = speed;
-        if (keysRef.current['ArrowLeft'] || keysRef.current['a']) { dx = -speed; setDirection(-1); }
-        if (keysRef.current['ArrowRight'] || keysRef.current['d']) { dx = speed; setDirection(1); }
+            if (keysRef.current['ArrowUp'] || keysRef.current['w']) dy = -1;
+            else if (keysRef.current['ArrowDown'] || keysRef.current['s']) dy = 1;
+            else if (keysRef.current['ArrowLeft'] || keysRef.current['a']) { dx = -1; setDirection(-1); }
+            else if (keysRef.current['ArrowRight'] || keysRef.current['d']) { dx = 1; setDirection(1); }
 
-        if (dx !== 0 || dy !== 0) {
-            setIsWalking(true);
-            const nextX = playerPos.x + dx;
-            const nextY = playerPos.y + dy;
+            if (dx !== 0 || dy !== 0) {
+                const nextX = playerGridPos.x + dx;
+                const nextY = playerGridPos.y + dy;
 
-            // Collision Check (Hitbox based)
-            if (isWalkable(nextX, nextY, mapData, worldType)) {
-                setPlayerPos({ x: nextX, y: nextY });
-                checkTriggers(nextX, nextY, mapData);
-            } else if (isWalkable(nextX, playerPos.y, mapData, worldType)) {
-                // Sliding along walls (X only)
-                setPlayerPos({ x: nextX, y: playerPos.y });
-                checkTriggers(nextX, playerPos.y, mapData);
-            } else if (isWalkable(playerPos.x, nextY, mapData, worldType)) {
-                // Sliding along walls (Y only)
-                setPlayerPos({ x: playerPos.x, y: nextY });
-                checkTriggers(playerPos.x, nextY, mapData);
+                if (isWalkable(nextX, nextY, mapData, worldType)) {
+                    setIsMoving(true);
+                    setPlayerGridPos({ x: nextX, y: nextY });
+                    
+                    // Trigger Logic
+                    checkTriggers(nextX, nextY, mapData);
+
+                    // Animation Lock
+                    setTimeout(() => {
+                        setIsMoving(false);
+                    }, MOVEMENT_SPEED_MS);
+                } else {
+                    // Collision feedback?
+                }
             }
-        } else {
-            setIsWalking(false);
         }
 
         // 3. Target Finding
-        updateInteractionTarget(playerPos, mapData, worldType);
+        updateInteractionTarget(playerGridPos, mapData, worldType);
 
     }, 16);
 
@@ -145,7 +147,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [mapData, playerPos, worldType, dialogue, interactionTarget, sanity, flashOpacity]);
+  }, [mapData, playerGridPos, worldType, dialogue, interactionTarget, sanity, flashOpacity, isMoving]);
 
   // --- LOGIC HELPERS ---
 
@@ -153,28 +155,23 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       // Bounds
       if (x < 0 || x >= data.width || y < 0 || y >= data.height) return false;
 
-      // Hitbox Size
-      const hitBoxSize = 0.3; 
+      // Tile Checks
+      const tile = data.tiles[y]?.[x];
       
-      const points = [
-          { px: x - hitBoxSize, py: y - hitBoxSize },
-          { px: x + hitBoxSize, py: y - hitBoxSize },
-          { px: x - hitBoxSize, py: y + hitBoxSize },
-          { px: x + hitBoxSize, py: y + hitBoxSize }
+      const blockers = [
+          TileType.WALL, 
+          TileType.VOID, 
+          TileType.LOCKED_DOOR, 
+          TileType.PILLAR, 
+          TileType.BOOKSHELF, 
+          TileType.FURNACE,
+          TileType.WATER // Water is solid unless bridge
       ];
 
-      for (const p of points) {
-          const tileX = Math.floor(p.px);
-          const tileY = Math.floor(p.py);
-          const tile = data.tiles[tileY]?.[tileX];
-          
-          if (tile === TileType.WALL || tile === TileType.VOID || tile === TileType.LOCKED_DOOR || tile === TileType.PILLAR || tile === TileType.BOOKSHELF || tile === TileType.FURNACE) return false;
-          
-          // WATER logic: Impassable
-          if (tile === TileType.WATER) return false;
-          // BRIDGE logic: Passable (It's not listed in the blockers above)
-          // BRIDGE is implicity passable.
-      }
+      // Special Case: Secret Door is walkable
+      if (tile === TileType.SECRET_DOOR) return true;
+
+      if (blockers.includes(tile)) return false;
 
       // Entity Collision
       for (const ent of data.entities) {
@@ -182,44 +179,41 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
               if (ent.hideFlag && flags.has(ent.hideFlag)) continue;
               if (ent.reqFlag && !flags.has(ent.reqFlag)) continue;
 
-              const dist = Math.sqrt(Math.pow(x - ent.x, 2) + Math.pow(y - ent.y, 2));
-              if (dist < 0.6) return false; 
+              // Grid exact match
+              if (ent.x === x && ent.y === y) return false;
           }
       }
       return true;
   };
 
   const checkTriggers = (x: number, y: number, data: MapData) => {
-      const tileX = Math.floor(x);
-      const tileY = Math.floor(y);
-      const key = `${tileX},${tileY}`;
+      const key = `${x},${y}`;
       const trigger = data.triggers[key];
       
       if (trigger) {
-          // Check Condition (Crucial for breaking loops)
+          // Check Condition
           if (trigger.condition && !trigger.condition(flags)) return;
 
           if (trigger.type === 'TELEPORT' && trigger.targetX !== undefined) {
-              const offsetX = x - tileX;
-              const offsetY = y - tileY;
-              
-              setPlayerPos({ 
-                  x: trigger.targetX + offsetX, 
-                  y: (trigger.targetY || tileY) + offsetY 
-              });
-              
-              if (trigger.flashEffect) setFlashOpacity(1);
-              if (trigger.message) {
-                  setLoopMessage(trigger.message);
-                  setTimeout(() => setLoopMessage(null), 3000);
-              }
+              // Delay teleport slightly to allow move animation to start/finish nicely
+              setTimeout(() => {
+                  setPlayerGridPos({ 
+                      x: trigger.targetX!, 
+                      y: trigger.targetY || y 
+                  });
+                  if (trigger.flashEffect) setFlashOpacity(1);
+                  if (trigger.message) {
+                      setLoopMessage(trigger.message);
+                      setTimeout(() => setLoopMessage(null), 3000);
+                  }
+              }, 100); 
           }
       }
   };
 
   const updateInteractionTarget = (pos: {x:number, y:number}, data: MapData, world: WorldType) => {
       let nearest: MapEntity | null = null;
-      let minDst = 1.0;
+      let minDst = 1.5; // Slightly larger range for grid comfort
       for (const ent of data.entities) {
           if (ent.visibleIn !== 'BOTH' && ent.visibleIn !== world) continue;
           if (ent.hideFlag && flags.has(ent.hideFlag)) continue;
@@ -237,6 +231,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   const handleInteraction = (entity: MapEntity) => {
       const helpers = {
           setFlag: (f: string) => setFlags(prev => new Set(prev).add(f)),
+          removeFlag: (f: string) => setFlags(prev => {
+              const next = new Set(prev);
+              next.delete(f);
+              return next;
+          }),
           hasFlag: (f: string) => flags.has(f),
           addItem: (id: string, name: string) => {
               setInventory(prev => new Set(prev).add(name));
@@ -254,11 +253,9 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   // --- CAMERA ---
   const getCameraOffset = () => {
       if (!mapData) return { x: 0, y: 0 };
-      const cx = playerPos.x * TILE_SIZE - window.innerWidth / 2;
-      const cy = playerPos.y * TILE_SIZE - window.innerHeight / 2;
+      const cx = playerGridPos.x * TILE_SIZE - window.innerWidth / 2;
+      const cy = playerGridPos.y * TILE_SIZE - window.innerHeight / 2;
       
-      // Clamp Logic
-      // We want to stop panning if we hit the edge of the map
       let tx = -cx;
       let ty = -cy;
       
@@ -282,24 +279,25 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         
         {/* WORLD RENDERER */}
         <div 
-            className="will-change-transform"
+            className="will-change-transform transition-transform duration-300 ease-out"
             style={{ transform: `translate3d(${camera.x}px, ${camera.y}px, 0)` }}
         >
             <Stage1Eientei mapData={mapData} worldType={worldType} />
 
             {/* Player */}
             <div 
-                className="absolute z-30 transition-none"
+                className="absolute z-30"
                 style={{
-                    left: (playerPos.x * TILE_SIZE) - (TILE_SIZE/2),
-                    top: (playerPos.y * TILE_SIZE) - (TILE_SIZE),
+                    left: (playerGridPos.x * TILE_SIZE),
+                    top: (playerGridPos.y * TILE_SIZE) - (TILE_SIZE * 0.5), // Offset slightly up for sprite height
                     width: TILE_SIZE,
                     height: TILE_SIZE,
+                    transition: `left ${MOVEMENT_SPEED_MS}ms linear, top ${MOVEMENT_SPEED_MS}ms linear`
                 }}
             >
                 {character.pixelSpriteUrl ? (
                     <img 
-                        src={isWalking ? character.pixelSpriteUrlWalk : character.pixelSpriteUrl} 
+                        src={isMoving ? character.pixelSpriteUrlWalk : character.pixelSpriteUrl} 
                         className="w-full h-full object-contain drop-shadow-lg"
                         style={{ transform: `scaleX(${direction})` }}
                     />
@@ -391,7 +389,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
         {/* TELEPORT FLASH EFFECT */}
         <div 
-            className="absolute inset-0 bg-white pointer-events-none z-[100]"
+            className="absolute inset-0 bg-white pointer-events-none z-[100] transition-opacity duration-300"
             style={{ opacity: flashOpacity }}
         />
 
