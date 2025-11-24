@@ -159,12 +159,12 @@ export const getStage1Data = (
   });
 
   // === INNER WORLD DATA PACKETS (LORE) ===
-  // Positioned near the river/data stream
+  // Positioned on the banks (y=37 for south bank, y=33 for north bank) so they are reachable
   if (worldType === WorldType.INNER_WORLD) {
       const deletedFiles = [
-          { x: 12, y: 35, name: 'trash_01.dat', text: "DELETED FILE: 'Tea_Break.exe'\nREASON: Inefficient use of processing time. 0.05% productivity loss detected." },
-          { x: 28, y: 35, name: 'trash_02.dat', text: "DELETED FILE: 'Donation_Greed.wav'\nREASON: Emotional variance exceeds safety threshold. The Administrator does not need money. The Administrator needs RESULTS." },
-          { x: 20, y: 36, name: 'trash_03.dat', text: "SYSTEM LOG: 'Reimu Hakurei' personality core has been archived. Loading 'Admin_Bot_v9.0'." }
+          { x: 12, y: 37, name: 'trash_01.dat', text: "DELETED FILE: 'Tea_Break.exe'\nREASON: Inefficient use of processing time. 0.05% productivity loss detected." },
+          { x: 28, y: 37, name: 'trash_02.dat', text: "DELETED FILE: 'Donation_Greed.wav'\nREASON: Emotional variance exceeds safety threshold. The Administrator does not need money. The Administrator needs RESULTS." },
+          { x: 20, y: 33, name: 'trash_03.dat', text: "SYSTEM LOG: 'Reimu Hakurei' personality core has been archived. Loading 'Admin_Bot_v9.0'." }
       ];
 
       deletedFiles.forEach((file, i) => {
@@ -254,21 +254,23 @@ export const getStage1Data = (
   // === LOOP & SECRET DOOR PUZZLE (PAINTING -> POSTER) ===
   
   // The Painting that hides the secret door
-  if (hasKey && statuesCorrect) {
-    if (!paintingTorn) {
-        entities.push({
-            id: 'secret_painting', x: 22, y: 20, // On the right wall of the corridor entrance
-            name: 'Compliance Poster', color: '#ff00ff', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
-            onInteract: ({ worldType, setFlag }) => {
-                if (worldType === WorldType.INNER_WORLD) {
-                    setFlag('PAINTING_TORN');
-                    alert("You rip down the 'OBEY' poster. The wall behind it is untextured—a developer backdoor into the core.");
-                } else {
-                    alert("A poster that reads: 'REPORT BUGS IMMEDIATELY'. It hangs crooked, as if hiding a secret.");
-                }
-            }
-        });
-    }
+  if (!paintingTorn) {
+      entities.push({
+          id: 'secret_painting', x: 22, y: 19, // On the wall
+          name: 'Compliance Poster', color: '#ff00ff', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
+          onInteract: ({ worldType, setFlag }) => {
+              if (worldType === WorldType.INNER_WORLD) {
+                  if (hasKey && statuesCorrect) {
+                      setFlag('PAINTING_TORN');
+                      alert("You rip down the 'OBEY' poster. The wall behind it is untextured—a developer backdoor into the core.");
+                  } else {
+                      alert("A garish poster reading 'OBEY'. You notice the corner is loose, but something (Security Protocols) prevents you from defacing it.");
+                  }
+              } else {
+                  alert("A poster that reads: 'REPORT BUGS IMMEDIATELY'. It hangs crooked, as if hiding a secret.");
+              }
+          }
+      });
   }
 
   // Loop Trigger Logic
