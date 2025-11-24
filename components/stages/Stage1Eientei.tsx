@@ -28,7 +28,7 @@ export const getStage1Data = (
   const lanternsLit = flags.has('LANTERN_L') && flags.has('LANTERN_R');
   const bookBurned = flags.has('BOOK_BURNED');
   const paintingTorn = flags.has('PAINTING_TORN');
-  const hasKey = inventory.has('Archive Key');
+  const hasKey = inventory.has('Admin Key'); // Fixed: Check for 'Admin Key' matching the item name added
   const hasLens = inventory.has('Obscure Lens');
   
   // Statue Rotation Helper
@@ -202,11 +202,13 @@ export const getStage1Data = (
               if (bookBurned) alert("RECYCLER: Empty.");
               else if (hasItem('Error Log')) {
                    setFlag('BOOK_BURNED');
+                   // FIX: Use 'Admin Key' for both ID and Name to ensure inventory logic matches
+                   addItem('Admin Key', 'Admin Key'); 
                    alert("You drag the 'Error Log' into the Recycle Bin. It dissolves into binary dust, revealing a hidden keycode in the hex dump.");
               } else alert("RECYCLER: Awaiting corrupted data input.");
           } else {
-              if (bookBurned && !inventory.has('Archive Key')) {
-                  addItem('Archive Key', 'Admin Key');
+              if (bookBurned && !inventory.has('Admin Key')) {
+                  addItem('Admin Key', 'Admin Key');
                   alert("Recovered 'Admin Key' from deleted file metadata!");
               } else alert("A secure data shredder. It hums with the sound of a thousand deleted files.");
           }
@@ -239,6 +241,12 @@ export const getStage1Data = (
               removeFlag(`${s.id}_ROT_3`);
               // Set new flag
               setFlag(`${s.id}_ROT_${nextRot}`);
+              
+              // Feedback Logic
+              const dirs = ['NORTH', 'EAST', 'SOUTH', 'WEST'];
+              const isNowCorrect = nextRot === s.correct;
+              const status = isNowCorrect ? "ALIGNMENT SIGNAL DETECTED" : "SEARCHING...";
+              alert(`Servo motor whirs.\nCamera facing: ${dirs[nextRot]}\nSystem: ${status}`);
           }
       });
 
