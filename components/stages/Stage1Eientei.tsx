@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MapData, TileType, MapEntity, WorldType, StageProps } from '../../types';
 
 export const TILE_SIZE = 64;
@@ -28,7 +28,7 @@ export const getStage1Data = (
   const lanternsLit = flags.has('LANTERN_L') && flags.has('LANTERN_R');
   const bookBurned = flags.has('BOOK_BURNED');
   const paintingTorn = flags.has('PAINTING_TORN');
-  const hasKey = inventory.has('Admin Key'); // Fixed: Check for 'Admin Key' matching the item name added
+  const hasKey = inventory.has('Admin Key'); 
   const hasLens = inventory.has('Obscure Lens');
   
   // Statue Rotation Helper
@@ -60,8 +60,6 @@ export const getStage1Data = (
     for (let x = 0; x < MAP_WIDTH; x++) {
       let tile = TileType.VOID;
 
-      // -- AREAS --
-
       // 1. SOUTH SPAWN & GARDEN (y: 30-49)
       if (y >= 30) {
           if (x >= 10 && x <= 30) tile = TileType.FLOOR;
@@ -75,10 +73,10 @@ export const getStage1Data = (
 
       // 2. CENTRAL HUB (y: 20-30)
       if (y >= 20 && y < 30) {
-          if (x >= 5 && x <= 35) tile = TileType.FLOOR; // Wide hub
+          if (x >= 5 && x <= 35) tile = TileType.FLOOR; 
       }
 
-      // 3. WEST ARCHIVES (x: 2-12, y: 10-28) -> FILING ROOM
+      // 3. WEST ARCHIVES (x: 2-12, y: 10-28)
       if (x >= 2 && x <= 12 && y >= 10 && y <= 28) {
           tile = TileType.FLOOR;
           if (x === 2 || x === 12 || y === 10 || y === 28) tile = TileType.WALL;
@@ -86,7 +84,7 @@ export const getStage1Data = (
           if (tile === TileType.FLOOR && x > 3 && x < 11 && y % 3 === 0) tile = TileType.BOOKSHELF;
       }
 
-      // 4. EAST STATUE HALL (x: 28-38, y: 10-28) -> DRONE HANGAR
+      // 4. EAST STATUE HALL (x: 28-38, y: 10-28)
       if (x >= 28 && x <= 38 && y >= 10 && y <= 28) {
           tile = TileType.FLOOR;
           if (x === 28 || x === 38 || y === 10 || y === 28) tile = TileType.WALL;
@@ -94,20 +92,14 @@ export const getStage1Data = (
       }
 
       // 5. NORTH CORRIDOR & BOSS (x: 18-22, y: 0-20)
-      // The "Looping" Main Path
       if (x >= 18 && x <= 22 && y < 20) {
           tile = TileType.FLOOR;
           if (x === 18 || x === 22) tile = TileType.WALL;
       }
 
       // 6. SECRET PATH (x: 23, y: 5-20)
-      // Only accessible if painting is torn
       if (paintingTorn) {
-          // This creates a narrow walkable strip to the right of the main corridor
-          if (x === 23 && y >= 5 && y <= 20) {
-              tile = TileType.PATH; 
-          }
-          // The Secret Door Entrance (Right next to the painting position x=22, y=20)
+          if (x === 23 && y >= 5 && y <= 20) tile = TileType.PATH; 
           if (x === 23 && y === 20) tile = TileType.SECRET_DOOR;
       }
 
@@ -121,7 +113,40 @@ export const getStage1Data = (
     tiles.push(row);
   }
 
-  // --- 2. ENTITIES & PUZZLES ---
+  // --- 2. DECORATIVE ENTITIES (Visuals) ---
+  
+  // Add "Asset Tagged Trees" along the garden path
+  for (let y = 38; y < 48; y += 4) {
+      // Left side trees
+      entities.push({
+          id: `tree_L_${y}`, x: 9, y: y,
+          name: 'Asset Tree', color: 'green', interactionType: 'READ', isSolid: true, visibleIn: 'BOTH',
+          onInteract: () => alert(`ASSET TAG: TREE_NATURAL_0${y}\nSTATUS: Awaiting pruning logic.`)
+      });
+      // Right side trees
+      entities.push({
+          id: `tree_R_${y}`, x: 31, y: y,
+          name: 'Asset Tree', color: 'green', interactionType: 'READ', isSolid: true, visibleIn: 'BOTH',
+          onInteract: () => alert(`ASSET TAG: TREE_NATURAL_0${y+1}\nSTATUS: Rendering...`)
+      });
+  }
+
+  // Add "Gohei Barriers" (The fences)
+  for (let y = 30; y < 48; y+= 2) {
+       if (y === 34 || y === 36) continue; // Skip river
+       entities.push({
+           id: `gohei_L_${y}`, x: 10, y: y,
+           name: 'Gohei Barrier', color: 'white', interactionType: 'READ', isSolid: false, visibleIn: WorldType.REALITY,
+           onInteract: () => alert("A sacred wand repurposed as a construction fence.")
+       });
+       entities.push({
+           id: `gohei_R_${y}`, x: 30, y: y,
+           name: 'Gohei Barrier', color: 'white', interactionType: 'READ', isSolid: false, visibleIn: WorldType.REALITY,
+           onInteract: () => alert("A sacred wand repurposed as a construction fence.")
+       });
+  }
+
+  // --- 3. INTERACTIVE ENTITIES & PUZZLES ---
 
   // === LENS ITEM (SPAWN) ===
   if (!inventory.has('Obscure Lens')) {
@@ -159,11 +184,10 @@ export const getStage1Data = (
   });
 
   // === INNER WORLD DATA PACKETS (LORE) ===
-  // Positioned on the banks (y=37 for south bank, y=33 for north bank) so they are reachable
   if (worldType === WorldType.INNER_WORLD) {
       const deletedFiles = [
-          { x: 12, y: 37, name: 'trash_01.dat', text: "DELETED FILE: 'Tea_Break.exe'\nREASON: Inefficient use of processing time. 0.05% productivity loss detected." },
-          { x: 28, y: 37, name: 'trash_02.dat', text: "DELETED FILE: 'Donation_Greed.wav'\nREASON: Emotional variance exceeds safety threshold. The Administrator does not need money. The Administrator needs RESULTS." },
+          { x: 15, y: 37, name: 'trash_01.dat', text: "DELETED FILE: 'Tea_Break.exe'\nREASON: Inefficient use of processing time. 0.05% productivity loss detected." },
+          { x: 25, y: 37, name: 'trash_02.dat', text: "DELETED FILE: 'Donation_Greed.wav'\nREASON: Emotional variance exceeds safety threshold. The Administrator does not need money. The Administrator needs RESULTS." },
           { x: 20, y: 33, name: 'trash_03.dat', text: "SYSTEM LOG: 'Reimu Hakurei' personality core has been archived. Loading 'Admin_Bot_v9.0'." }
       ];
 
@@ -185,7 +209,7 @@ export const getStage1Data = (
       });
   }
 
-  // **STORY ITEM: Eirin's Terminal**
+  // Eirin's Terminal
   entities.push({
       id: 'eirin_log', x: 4, y: 27,
       name: 'Encrypted Tablet', color: '#888', interactionType: 'READ', isSolid: true, visibleIn: WorldType.REALITY,
@@ -202,7 +226,6 @@ export const getStage1Data = (
               if (bookBurned) alert("RECYCLER: Empty.");
               else if (hasItem('Error Log')) {
                    setFlag('BOOK_BURNED');
-                   // FIX: Use 'Admin Key' for both ID and Name to ensure inventory logic matches
                    addItem('Admin Key', 'Admin Key'); 
                    alert("You drag the 'Error Log' into the Recycle Bin. It dissolves into binary dust, revealing a hidden keycode in the hex dump.");
               } else alert("RECYCLER: Awaiting corrupted data input.");
@@ -232,17 +255,13 @@ export const getStage1Data = (
           name: 'Security Drone', color: '#888', interactionType: 'PUZZLE', isSolid: true, visibleIn: WorldType.REALITY,
           rotation: currentRot,
           onInteract: ({ setFlag, removeFlag }) => {
-              // Calculate next rotation
               const nextRot = (currentRot + 1) % 4;
-              // Remove ALL previous rotation flags for this statue
               removeFlag(`${s.id}_ROT_0`);
               removeFlag(`${s.id}_ROT_1`);
               removeFlag(`${s.id}_ROT_2`);
               removeFlag(`${s.id}_ROT_3`);
-              // Set new flag
               setFlag(`${s.id}_ROT_${nextRot}`);
               
-              // Feedback Logic
               const dirs = ['NORTH', 'EAST', 'SOUTH', 'WEST'];
               const isNowCorrect = nextRot === s.correct;
               const status = isNowCorrect ? "ALIGNMENT SIGNAL DETECTED" : "SEARCHING...";
@@ -261,7 +280,6 @@ export const getStage1Data = (
 
   // === LOOP & SECRET DOOR PUZZLE (PAINTING -> POSTER) ===
   
-  // The Painting that hides the secret door
   if (!paintingTorn) {
       entities.push({
           id: 'secret_painting', x: 22, y: 19, // On the wall
@@ -310,12 +328,30 @@ export const getStage1Data = (
 };
 
 // --- VISUAL COMPONENT ---
-const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
+const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }) => {
   const isReality = worldType === WorldType.REALITY;
+  const [stamps, setStamps] = useState<{id: number, x: number, y: number, type: string}[]>([]);
 
-  // -- VISUAL STYLES --
-  // Reality: Construction site, Grey/Yellow, "Under Maintenance"
-  // Inner: Red/Black, Glitches, "Fatal Error"
+  // Effect: Randomly generate "Stamps" falling in the Inner World
+  useEffect(() => {
+      if (isReality) {
+          setStamps([]);
+          return;
+      }
+
+      const interval = setInterval(() => {
+          if (Math.random() > 0.3) return; // Chance to spawn
+          const newStamp = {
+              id: Date.now(),
+              x: Math.random() * 100, // Percent
+              y: Math.random() * 100,
+              type: Math.random() > 0.7 ? '处决' : (Math.random() > 0.5 ? '驳回' : '受理')
+          };
+          setStamps(prev => [...prev.slice(-5), newStamp]); // Keep last 6
+      }, 500);
+
+      return () => clearInterval(interval);
+  }, [isReality]);
 
   const renderTile = (type: number, x: number, y: number) => {
     const style: React.CSSProperties = {
@@ -386,17 +422,31 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
     if (type === TileType.WALL) {
         return (
             <div key={`${x}-${y}`} style={style} className={`
-                ${isReality ? 'bg-gray-200' : 'bg-[#300]'}
-                flex items-center justify-center overflow-hidden
+                ${isReality ? 'bg-gray-200' : 'bg-black'}
+                flex items-center justify-center overflow-hidden relative
             `}>
                 {isReality ? (
-                    // Reality: Caution Tape Wall
-                    <div className="w-full h-full bg-[repeating-linear-gradient(45deg,#facc15,#facc15_10px,#000_10px,#000_20px)] opacity-50"></div>
+                    // Reality: Caution Tape Wall (Yellow/Black Strips)
+                    <>
+                        <div className="absolute inset-0 bg-yellow-400"></div>
+                        <div className="absolute inset-0" style={{
+                            backgroundImage: 'repeating-linear-gradient(45deg, #000 0, #000 10px, #fbbf24 10px, #fbbf24 20px)'
+                        }}></div>
+                        <div className="absolute bg-black text-yellow-400 text-[8px] font-bold px-1 border border-yellow-400 z-10">
+                            KEEP OUT
+                        </div>
+                    </>
                 ) : (
-                    // Inner: Firewall
-                    <div className="w-full h-full border border-red-600 shadow-[inset_0_0_10px_red]">
-                        <div className="text-[8px] text-red-600 font-mono p-1">ACCESS DENIED</div>
-                    </div>
+                    // Inner: Laser Wall (Red Lines)
+                    <>
+                        <div className="absolute inset-0 bg-red-900/20"></div>
+                        <div className="w-1 h-full bg-red-600 shadow-[0_0_10px_red] animate-pulse"></div>
+                        <div className="absolute top-0 w-full h-full flex flex-col justify-between py-2 opacity-50">
+                            <div className="w-full h-[1px] bg-red-500"></div>
+                            <div className="w-full h-[1px] bg-red-500"></div>
+                            <div className="w-full h-[1px] bg-red-500"></div>
+                        </div>
+                    </>
                 )}
             </div>
         );
@@ -432,6 +482,73 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
           width: TILE_SIZE,
           height: TILE_SIZE,
       };
+
+      // --- NEW ASSETS (Trees & Gohei) ---
+      
+      if (entity.name === 'Asset Tree') {
+          // Check for generated asset
+          if (propSprites['PROP_ASSET_TREE']) {
+              return (
+                   <div key={entity.id} style={style} className="absolute z-20 -top-16 w-full h-[128px] pointer-events-none flex justify-center">
+                       <img 
+                            src={propSprites['PROP_ASSET_TREE']} 
+                            className={`h-full object-contain ${!isReality ? 'grayscale brightness-50 contrast-150' : ''}`}
+                            alt="Tree" 
+                       />
+                       {/* Overlay tag on top of image */}
+                       <div className="absolute bottom-8 bg-white border border-black text-[6px] font-mono px-1 shadow-[0_0_5px_white] rotate-12">
+                          ID: 049
+                       </div>
+                   </div>
+              );
+          }
+          // Fallback CSS
+          return (
+              <div key={entity.id} style={style} className="absolute z-20 -top-8 h-[96px] flex flex-col items-center justify-end pointer-events-none">
+                  {/* Visual Simulation of Tree */}
+                  <div className={`w-16 h-24 ${isReality ? 'bg-green-900' : 'bg-red-900 grayscale'} relative rounded-t-full shadow-sm`}>
+                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-8 bg-[#3e2723]"></div>
+                      {/* The Asset Tag */}
+                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white border border-black text-[6px] font-mono px-1 shadow-[0_0_5px_white] rotate-12">
+                          ID: 049
+                      </div>
+                      {/* Branches */}
+                      <div className="absolute top-4 -left-2 w-6 h-6 bg-green-800 rounded-full"></div>
+                      <div className="absolute top-8 right-0 w-8 h-8 bg-green-700 rounded-full"></div>
+                  </div>
+              </div>
+          );
+      }
+
+      if (entity.name === 'Gohei Barrier') {
+          if (propSprites['PROP_GOHEI']) {
+              return (
+                   <div key={entity.id} style={style} className="absolute z-20 -top-8 w-full h-[96px] pointer-events-none flex justify-center items-end">
+                       <img 
+                            src={propSprites['PROP_GOHEI']} 
+                            className="h-full object-contain"
+                            alt="Gohei" 
+                       />
+                       {!isReality && <div className="absolute top-0 w-full h-full bg-red-500 blur-xl opacity-20 animate-pulse"></div>}
+                   </div>
+              );
+          }
+
+          // Fallback
+          return (
+              <div key={entity.id} style={style} className="absolute z-20 flex items-end justify-center pointer-events-none">
+                  <div className="relative w-2 h-12 bg-gray-300 rotate-12 origin-bottom border border-gray-600">
+                      {/* Zig Zag Paper */}
+                      <div className="absolute top-1 -left-4 w-8 h-4 bg-white skew-x-12 border border-gray-300 shadow-sm"></div>
+                      <div className="absolute top-3 left-2 w-6 h-4 bg-white -skew-x-12 border border-gray-300 shadow-sm"></div>
+                      {/* Glow in inner world */}
+                      {!isReality && <div className="absolute -top-2 -left-2 w-8 h-8 bg-red-500 blur-lg opacity-50 animate-pulse"></div>}
+                  </div>
+              </div>
+          );
+      }
+
+      // --- EXISTING ASSETS ---
 
       if (entity.name.includes('Data Packet')) {
           return (
@@ -533,17 +650,59 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
         {mapData.tiles.map((row, y) => row.map((type, x) => renderTile(type, x, y)))}
         {mapData.entities.map(renderEntity)}
         
-        {/* ATMOSPHERE OVERLAYS */}
-        <div className={`absolute inset-0 pointer-events-none mix-blend-overlay transition-colors duration-1000 ${isReality ? 'bg-cyan-900/10' : 'bg-red-900/30'}`}></div>
-        
-        {/* Steam / Fog for Reality */}
+        {/* === ATMOSPHERE LAYERS === */}
+
+        {/* REALITY: STEAM & FLUORESCENT LIGHT */}
         {isReality && (
-             <div className="absolute inset-0 pointer-events-none bg-[url('https://media.giphy.com/media/26tP41tqF1T540c4o/giphy.gif')] opacity-10 mix-blend-screen bg-repeat"></div>
+            <>
+                {/* Cold Blue Light Filter */}
+                <div className="absolute inset-0 pointer-events-none bg-blue-100/10 mix-blend-screen"></div>
+                
+                {/* Steam/Fog Animation */}
+                <div className="absolute inset-0 pointer-events-none opacity-30 overflow-hidden mix-blend-hard-light">
+                    <div className="absolute inset-0 bg-[url('https://media.giphy.com/media/26tP41tqF1T540c4o/giphy.gif')] bg-repeat opacity-40"></div>
+                    <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent"></div>
+                </div>
+            </>
         )}
 
-        {/* Glitch for Inner World */}
+        {/* INNER WORLD: RED VOID & STAMPS */}
         {!isReality && (
-             <div className="absolute inset-0 pointer-events-none opacity-20" style={{backgroundImage: 'linear-gradient(rgba(255, 0, 0, 0.1) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06))', backgroundSize: '100% 2px, 3px 100%'}}></div>
+            <>
+                {/* Red Overlay */}
+                <div className="absolute inset-0 pointer-events-none bg-red-900/20 mix-blend-overlay"></div>
+                
+                {/* Glitch Scanlines */}
+                <div className="absolute inset-0 pointer-events-none opacity-20" style={{
+                    backgroundImage: 'linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06))', 
+                    backgroundSize: '100% 2px, 3px 100%'
+                }}></div>
+
+                {/* FALLING STAMPS ANIMATION */}
+                {stamps.map(s => (
+                    <div 
+                        key={s.id}
+                        className="absolute z-50 pointer-events-none text-red-600 font-black border-4 border-red-600 p-4 rounded-lg tracking-widest opacity-0 animate-[stampDrop_0.5s_forwards]"
+                        style={{
+                            left: `${s.x}%`,
+                            top: `${s.y}%`,
+                            transform: 'rotate(-15deg)',
+                            fontSize: '32px',
+                            textShadow: '2px 2px 0px black',
+                            boxShadow: 'inset 0 0 20px red'
+                        }}
+                    >
+                        {s.type}
+                    </div>
+                ))}
+                <style>{`
+                    @keyframes stampDrop {
+                        0% { transform: scale(3) rotate(0deg); opacity: 0; }
+                        80% { transform: scale(0.9) rotate(-15deg); opacity: 1; }
+                        100% { transform: scale(1) rotate(-15deg); opacity: 0.8; }
+                    }
+                `}</style>
+            </>
         )}
     </div>
   );

@@ -8,11 +8,12 @@ interface ExplorationProps {
   scenarioEnemies: Enemy[];
   onEncounter: (enemy: Enemy) => void;
   backgroundUrl?: string;
+  propSprites: Record<string, string>; // New Prop for generated assets
 }
 
 const MOVEMENT_SPEED_MS = 200; // Time to move one tile
 
-const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, onEncounter, backgroundUrl }) => {
+const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, onEncounter, backgroundUrl, propSprites }) => {
   // --- ENGINE STATE ---
   const [worldType, setWorldType] = useState<WorldType>(WorldType.REALITY);
   const [sanity, setSanity] = useState(100);
@@ -290,7 +291,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             className="will-change-transform transition-transform duration-300 ease-out"
             style={{ transform: `translate3d(${camera.x}px, ${camera.y}px, 0)` }}
         >
-            <Stage1Eientei mapData={mapData} worldType={worldType} />
+            <Stage1Eientei mapData={mapData} worldType={worldType} propSprites={propSprites} />
 
             {/* Player */}
             <div 

@@ -176,4 +176,5 @@ export interface MapData {
 export interface StageProps {
     mapData: MapData;
     worldType: WorldType;
+    propSprites: Record<string, string>; // ID -> URL mapping for map props
 }

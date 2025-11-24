@@ -26,12 +26,14 @@ const App: React.FC = () => {
       sprites: Record<string, { url: string, isLocal: boolean }>,
       portraits: Record<string, { url: string, isLocal: boolean }>,
       enemySprites: Record<string, { url: string, isLocal: boolean }>,
-      backgrounds: Record<string, { url: string, isLocal: boolean }>
+      backgrounds: Record<string, { url: string, isLocal: boolean }>,
+      props: Record<string, { url: string, isLocal: boolean }>
   }>({
       sprites: {},
       portraits: {},
       enemySprites: {},
-      backgrounds: {}
+      backgrounds: {},
+      props: {}
   });
 
   const [loadingStatus, setLoadingStatus] = useState<string | null>(null);
@@ -65,10 +67,12 @@ const App: React.FC = () => {
           }
       });
       if (type === 'sprite' && !Object.values(CharacterId).includes(id as any)) {
-           setLoadedAssets(prev => ({...prev, enemySprites: {...prev.enemySprites, [id]: result}}));
-      }
-      if (type === 'background') {
-           setLoadedAssets(prev => ({...prev, backgrounds: {...prev.backgrounds, [id]: result}}));
+           // It's either an enemy or a prop. Simple heuristic: props start with PROP_
+           if (id.startsWith('PROP_')) {
+               setLoadedAssets(prev => ({...prev, props: {...prev.props, [id]: result}}));
+           } else {
+               setLoadedAssets(prev => ({...prev, enemySprites: {...prev.enemySprites, [id]: result}}));
+           }
       }
   };
 
@@ -91,6 +95,31 @@ const App: React.FC = () => {
         scenario.locationVisualPrompt
     );
     if (bg) setLoadedAssets(prev => ({...prev, backgrounds: {...prev.backgrounds, [`${scenario.id}_MAP`]: bg}}));
+
+    // Load Stage Props (New)
+    if (charId === CharacterId.KAGUYA) {
+        setLoadingStatus("Generating Cyberpunk Props...");
+        
+        // 1. Asset Tree
+        const tree = await fetchAsset(
+            'PROP_ASSET_TREE', 
+            'Asset Tree', 
+            'A tree with a barcode.', 
+            'sprite', 
+            'Pixel art cyberpunk tree, dead branches, glowing digital barcode tag attached to trunk. High contrast, neon green accents. Transparent background.'
+        );
+        if (tree) updateAssetRecord('PROP_ASSET_TREE', 'sprite', tree);
+
+        // 2. Gohei Barrier
+        const gohei = await fetchAsset(
+            'PROP_GOHEI',
+            'Gohei Barrier',
+            'A shinto wand used as a fence.',
+            'sprite',
+            'Pixel art Shinto Gohei wand stuck in the ground vertically. The paper streamers are glowing neon red. Cyberpunk style. Transparent background.'
+        );
+        if (gohei) updateAssetRecord('PROP_GOHEI', 'sprite', gohei);
+    }
 
     setLoadingStatus(null);
   };
@@ -151,6 +180,15 @@ const App: React.FC = () => {
           pixelSpriteUrl: loadedAssets.enemySprites[activeEnemy.name]?.url || FALLBACK_SPRITE,
           backgroundUrl: loadedAssets.backgrounds[activeEnemy.name]?.url || ''
       };
+  };
+
+  // Convert props record to simple string map for stage component
+  const getPropSprites = () => {
+      const result: Record<string, string> = {};
+      Object.entries(loadedAssets.props).forEach(([key, val]) => {
+          result[key] = val.url;
+      });
+      return result;
   };
 
   // --- Render ---
@@ -264,6 +302,7 @@ const App: React.FC = () => {
             scenarioEnemies={currentScenario.enemies}
             onEncounter={handleEncounter}
             backgroundUrl={loadedAssets.backgrounds[`${currentScenario.id}_MAP`]?.url}
+            propSprites={getPropSprites()}
           />
         );
 
