@@ -8,14 +8,13 @@ export const TILE_SIZE = 64;
 const MAP_WIDTH = 40; 
 const MAP_HEIGHT = 50;
 
-// --- LOOP CONFIGURATION ---
-// The corridor is at X = 18-22.
-// The Loop protects the Boss Room (Y=0 to Y=5).
-// The Loop Active Area is Y=6 to Y=18.
-const LOOP_TOP_TRIGGER = 6;
-const LOOP_TOP_TARGET = 16;
-const LOOP_BOTTOM_TRIGGER = 17;
-const LOOP_BOTTOM_TARGET = 7;
+// The Corridor Loop Logic
+// Main Corridor is X=18 to X=22
+const LOOP_REGION_Y_START = 10;
+const LOOP_REGION_Y_END = 25;
+// Teleports player back if they try to walk North through the corridor without the Secret Path
+const LOOP_TRIGGER_Y = 12; 
+const LOOP_TARGET_Y = 24;
 
 export const getStage1Data = (
     flags: Set<string>,
@@ -26,28 +25,20 @@ export const getStage1Data = (
   const entities: MapEntity[] = [];
   const triggers: Record<string, any> = {};
 
-  // -- PUZZLE STATE CHECKS --
+  // -- PUZZLE STATE --
   const paintingTorn = flags.has('PAINTING_TORN');
-  const lanternLit = flags.has('LANTERN_LIT');
-  const archiveKey = flags.has('KEY_ARCHIVE');
-  const statueKey = flags.has('KEY_STATUE');
+  const moonGateOpen = flags.has('MOON_GATE_OPEN');
   
-  // Statue Rotation State (0-3)
-  const getStatueDir = (id: number) => {
-      if (flags.has(`STATUE_${id}_3`)) return 3; // Left
-      if (flags.has(`STATUE_${id}_2`)) return 2; // Down
-      if (flags.has(`STATUE_${id}_1`)) return 1; // Right
-      return 0; // Up (Default)
-  };
+  // Count Fragments
+  const fragments = ['Fragment (Full)', 'Fragment (Waning)', 'Fragment (New)', 'Fragment (Waxing)'];
+  const heldFragments = fragments.filter(f => inventory.has(f)).length;
 
   // Objective Logic
-  let objectiveText = "Explore the mansion. The central corridor is infinite.";
-  if (!inventory.has("Guide Note")) objectiveText = "Find clues in the starting room.";
-  else if (!archiveKey) objectiveText = "Investigate the Western Archives (Left).";
-  else if (!statueKey) objectiveText = "Solve the riddle of the Eastern Statue Hall (Right).";
-  else if (!lanternLit) objectiveText = "The Garden path is blocked by water. Light the way.";
-  else if (!paintingTorn) objectiveText = "Use the Lens to cross the Garden pond and find the source.";
-  else objectiveText = "The Loop is broken. Confront the shadow in the North.";
+  let objectiveText = "Escape the eternal night.";
+  if (heldFragments < 4) objectiveText = `Find the 4 Jade Fragments hidden in reality. Use the Lens to spot them. (${heldFragments}/4)`;
+  else if (!moonGateOpen) objectiveText = "The Moon Gate awaits. Arrange the phases in reverse time.";
+  else if (!paintingTorn) objectiveText = "The corridor is endless. Find the lie in the gallery.";
+  else objectiveText = "The loop is broken. Confront the Mastermind.";
 
   // --- 1. BUILD GEOMETRY ---
   for (let y = 0; y < MAP_HEIGHT; y++) {
@@ -55,84 +46,55 @@ export const getStage1Data = (
     for (let x = 0; x < MAP_WIDTH; x++) {
       let tile = TileType.VOID;
 
-      // --- ZONES ---
-
-      // 1. STARTING HALL (Bottom)
-      // Area: x[15-25], y[40-48]
-      if (x >= 15 && x <= 25 && y >= 40 && y <= 48) {
-          tile = TileType.FLOOR;
-          if (x === 15 || x === 25 || y === 48) tile = TileType.WALL;
-          if (y === 40 && x >= 18 && x <= 22) tile = TileType.FLOOR; // Exit North
+      // 1. MAIN HALL & CROSSROADS (Center)
+      if (x >= 15 && x <= 25 && y >= 25 && y <= 45) {
+          tile = TileType.FLOOR; // Will render as Wood(Reality) or Gold(Inner)
+          if (x === 15 || x === 25 || y === 45) tile = TileType.WALL;
       }
 
-      // 2. CENTRAL CROSSROADS (Hub)
-      // Area: x[10-30], y[30-40]
-      if (x >= 10 && x <= 30 && y >= 30 && y <= 40) {
+      // 2. WEST WING: The Archives (Fragment 1 & Note)
+      if (x >= 2 && x < 15 && y >= 30 && y <= 42) {
           tile = TileType.FLOOR;
-          if (y === 30 && (x < 18 || x > 22)) tile = TileType.WALL; // Top wall except door
-          if (y === 40 && (x < 18 || x > 22)) tile = TileType.WALL; // Bottom wall except door
+          if (x === 2 || y === 30 || y === 42) tile = TileType.WALL;
+          if (x === 14 && y === 36) tile = TileType.FLOOR; // Door
           
-          // Connectors to West/East wings
-          if (x === 10 && (y < 34 || y > 36)) tile = TileType.WALL;
-          if (x === 30 && (y < 34 || y > 36)) tile = TileType.WALL;
+          // Bookshelves
+          if (x > 4 && x < 12 && y % 3 === 0) tile = TileType.BOOKSHELF;
       }
 
-      // 3. WESTERN ARCHIVES (Library)
-      // Area: x[2-10], y[25-45]
-      if (x >= 2 && x < 10 && y >= 25 && y <= 45) {
+      // 3. EAST WING: The Storehouse (Fragment 2 & Stash)
+      if (x > 25 && x <= 38 && y >= 30 && y <= 42) {
           tile = TileType.FLOOR;
-          if (x === 2 || y === 25 || y === 45) tile = TileType.WALL;
-          // Bookshelves Pattern
-          if (x > 3 && x < 9 && y % 3 === 0) tile = TileType.BOOKSHELF;
+          if (x === 38 || y === 30 || y === 42) tile = TileType.WALL;
+          if (x === 26 && y === 36) tile = TileType.FLOOR; // Door
+      }
+
+      // 4. THE INFINITE CORRIDOR (North)
+      if (x >= 18 && x <= 22 && y >= 5 && y < 25) {
+          tile = TileType.FLOOR;
+          // Walls
+          if (x === 18 || x === 22) tile = TileType.WALL;
           
-          // Furnace Room (Top Left Corner of Archives)
-          if (x < 6 && y < 30) tile = TileType.FLOOR; 
-          if (x === 5 && y === 28) tile = TileType.FURNACE;
-      }
-
-      // 4. EASTERN STATUE HALL
-      // Area: x[30-38], y[25-45]
-      if (x > 30 && x <= 38 && y >= 25 && y <= 45) {
-          tile = TileType.FLOOR;
-          if (x === 38 || y === 25 || y === 45) tile = TileType.WALL;
-      }
-
-      // 5. GARDEN (The Water Puzzle)
-      // Area: x[10-30], y[15-30]
-      if (x >= 10 && x <= 30 && y >= 15 && y < 30) {
-          tile = TileType.FLOOR;
-          // Water Pool in middle
-          if (x >= 14 && x <= 26 && y >= 18 && y <= 26) {
-              tile = TileType.WATER;
-              // Magic Bridge Logic
-              // If Lantern is lit, these specific tiles become bridges
-              if (lanternLit && x >= 18 && x <= 22) {
-                  tile = TileType.BRIDGE;
-              }
+          // The Secret Door (West Wall of Corridor)
+          if (x === 18 && y === 15) {
+              tile = paintingTorn ? TileType.SECRET_DOOR : TileType.PAINTING;
           }
       }
 
-      // 6. NORTHERN CORRIDOR (The Loop)
-      // Area: x[18-22], y[0-15]
-      if (x >= 18 && x <= 22 && y >= 0 && y < 15) {
-          tile = TileType.FLOOR;
-          // Pillars on sides
-          if (x === 18 || x === 22) {
-              tile = (y % 3 === 0) ? TileType.PILLAR : TileType.LANTERN;
-          }
-          // Loop Seals
-          if (y === LOOP_TOP_TRIGGER || y === LOOP_BOTTOM_TRIGGER) tile = TileType.SEAL;
+      // 5. THE SECRET PATH (Bypasses Loop)
+      // A narrow passage behind the painting
+      if (x >= 14 && x <= 17 && y >= 8 && y <= 15) {
+          tile = TileType.VOID;
+          if (x === 17 && y >= 8 && y <= 15) tile = TileType.PATH; // The path
+          if (x === 17 && y === 8) tile = TileType.FLOOR; // Re-entry
       }
+      // Connector back to main path at Y=8 (Past the loop trigger)
+      if (x === 18 && y === 8) tile = TileType.SECRET_DOOR;
 
-      // 7. BOSS ROOM (Top)
-      if (x >= 15 && x <= 25 && y >= 0 && y <= 5) {
+      // 6. BOSS ANTECHAMBER (Northmost)
+      if (x >= 15 && x <= 25 && y >= 0 && y < 5) {
           tile = TileType.FLOOR;
-          if (y === 5 && (x < 18 || x > 22)) tile = TileType.WALL;
-      }
-
-      // 8. SECRET ROOM (Painting) - Accessed via Garden Bridge
-      if (x >= 28 && x <= 32 && y >= 10 && y <= 15) {
-           tile = TileType.FLOOR;
+          if (y === 5) tile = TileType.MOON_GATE; // The Gate
       }
 
       row.push(tile);
@@ -140,171 +102,143 @@ export const getStage1Data = (
     tiles.push(row);
   }
 
-  // --- 2. ENTITIES & PUZZLES ---
+  // --- 2. ENTITIES ---
 
-  // -- START --
-  if (!inventory.has("Guide Note")) {
-    entities.push({
-        id: 'start_note', x: 20.5, y: 44, name: 'Guide Note', color: 'white', interactionType: 'ITEM', isSolid: false, visibleIn: 'BOTH',
-        onInteract: ({ addItem }) => {
-            addItem("Guide Note", "Guide Note");
-            alert("NOTE: 'The mansion is split in two. Use the Lens [Space] to see the truth. The Spirits know the way.'");
-        }
-    });
-  }
-
-  // -- ARCHIVES PUZZLE --
-  // Dusty Book (Reality Only)
-  if (!inventory.has("Dusty Book") && !inventory.has("Archive Key") && !archiveKey) {
+  // -- STARTING NOTE --
+  if (!inventory.has("Doctor's Note")) {
       entities.push({
-          id: 'dusty_book', x: 8, y: 40, name: 'Dusty Book', color: '#8B4513', interactionType: 'ITEM', isSolid: true, visibleIn: WorldType.REALITY,
+          id: 'doc_note', x: 20, y: 42, name: 'Torn Note', color: '#fff', interactionType: 'READ', isSolid: true, visibleIn: 'BOTH',
           onInteract: ({ addItem }) => {
-              addItem("Dusty Book", "Dusty Book");
-              alert("You found a book covered in strange ash. It feels warm.");
-          }
-      });
-  }
-  // Furnace (Inner World Interaction)
-  entities.push({
-      id: 'furnace_trigger', x: 5, y: 29, name: 'Spirit Furnace', color: '#ff4400', interactionType: 'PUZZLE', isSolid: true, visibleIn: WorldType.INNER_WORLD,
-      onInteract: ({ hasItem, setFlag, worldType }) => {
-          if (hasItem("Dusty Book")) {
-              setFlag("ASHES_CREATED");
-              alert("You throw the Dusty Book into the spectral fire. It burns blue, leaving something solid behind.");
-          } else {
-              alert("A furnace burning with cold fire. It hungers for knowledge.");
-          }
-      }
-  });
-  // Ashes/Key (Reality Interaction after burn)
-  if (flags.has("ASHES_CREATED") && !inventory.has("Archive Key") && !archiveKey) {
-      entities.push({
-          id: 'ashes_pile', x: 5, y: 29, name: 'Ashes', color: '#888', interactionType: 'ITEM', isSolid: false, visibleIn: WorldType.REALITY,
-          onInteract: ({ addItem, setFlag }) => {
-              addItem("Archive Key", "Archive Key");
-              setFlag("KEY_ARCHIVE");
-              alert("You sift through the cold ashes in reality and find a heavy iron key.");
+              addItem("Doctor's Note", "Doctor's Note");
+              alert("HANDWRITTEN NOTE: 'The stagnation is spreading. My attempt to build a vessel failed. The key to the Moon Gate lies in reversing the flow of time: Full -> Waning -> New -> Waxing. -Eirin'");
           }
       });
   }
 
-  // -- STATUE PUZZLE --
-  // 4 Statues in East Wing
-  // Correct Direction: Up, Right, Down, Left (Clockwise starting TL)
-  const statues = [
-      { id: 1, x: 33, y: 30, correct: 0 }, // TL - Up
-      { id: 2, x: 36, y: 30, correct: 1 }, // TR - Right
-      { id: 3, x: 36, y: 40, correct: 2 }, // BR - Down
-      { id: 4, x: 33, y: 40, correct: 3 }, // BL - Left
+  // -- THE 4 JADE FRAGMENTS --
+  // Mechanic: Red Glow in Inner World (Hint), Invisible but clickable in Reality.
+  
+  const fragmentLocations = [
+      { id: 'Fragment (Full)', x: 6, y: 32, hint: "Archives Top" }, // West Wing
+      { id: 'Fragment (Waning)', x: 35, y: 40, hint: "Storehouse Bottom" }, // East Wing
+      { id: 'Fragment (New)', x: 24, y: 26, hint: "Crossroads Right" }, // Hub
+      { id: 'Fragment (Waxing)', x: 16, y: 26, hint: "Crossroads Left" }, // Hub
   ];
 
-  // Statue Logic
-  let solvedStatues = 0;
-  statues.forEach(s => {
-      const currentDir = getStatueDir(s.id);
-      if (currentDir === s.correct) solvedStatues++;
+  fragmentLocations.forEach(frag => {
+      if (!inventory.has(frag.id)) {
+          // 1. Inner World Indicator (Visual Only)
+          entities.push({
+              id: `hint_${frag.id}`, x: frag.x, y: frag.y, 
+              name: 'Resonance', color: 'red', interactionType: 'DIALOGUE', isSolid: false, visibleIn: WorldType.INNER_WORLD,
+              onInteract: () => alert("A strong spiritual resonance... Something is hidden here in reality.")
+          });
 
-      // Reality: The Physical Statue
+          // 2. Reality Pickup (Invisible)
+          entities.push({
+              id: `pickup_${frag.id}`, x: frag.x, y: frag.y,
+              name: '???', color: 'transparent', interactionType: 'ITEM', isSolid: false, visibleIn: WorldType.REALITY,
+              onInteract: ({ addItem }) => {
+                  addItem(frag.id, frag.id);
+                  alert(`You found: ${frag.id}. It feels cold to the touch.`);
+              }
+          });
+      }
+  });
+
+  // -- KAGUYA'S SECRET STASH --
+  if (!inventory.has("Secret Stash")) {
       entities.push({
-          id: `statue_${s.id}`, x: s.x, y: s.y, name: 'Rabbit Statue', color: '#ccc', interactionType: 'PUZZLE', isSolid: true, visibleIn: WorldType.REALITY,
-          rotation: currentDir,
-          onInteract: ({ setFlag }) => {
-              const nextDir = (currentDir + 1) % 4;
-              // Clear old flags for this statue
-              // Simplified: We assume flags are additive, but we need unique flags per state.
-              // In a real app we'd remove old flags, here we just check highest precedence or rely on state management.
-              // For simplicity: We will just alert rotation in this demo constraint or use flags smartly.
-              // We'll use a unique string for each state: STATUE_X_1, STATUE_X_2...
-              setFlag(`STATUE_${s.id}_${nextDir}`);
-              // Note: This naive setFlag doesn't clear previous. 
-              // *Fix*: The getStatueDir function reads in reverse order (3, 2, 1, 0). 
-              // So setting 3 overrides 2. To reset to 0, we can't easily 'unset' in this system without a removeFlag helper.
-              // *Hack*: We will assume the player cycles 0->1->2->3. If they go past 3, we ideally reset. 
-              // Since we can't unset, we'll just implement modulo logic in the renderer/getter if we could, 
-              // but here we are limited.
-              // *Better Approach*: Just assume the flag represents the current state.
+          id: 'stash', x: 32, y: 32, name: 'Fancy Box', color: 'gold', interactionType: 'ITEM', isSolid: true, visibleIn: 'BOTH',
+          onInteract: ({ addItem, worldType }) => {
+              if (worldType === WorldType.INNER_WORLD) {
+                  addItem("Secret Stash", "Donation Ticket");
+                  alert("Obtained 'Donation Ticket'. Wait, this is just a coupon for the Hakurei Shrine?!");
+              } else {
+                  addItem("Secret Stash", "Kaguya's Stash");
+                  alert("Obtained 'Kaguya's Secret Stash'. It looks valuable.");
+              }
           }
       });
+  }
 
-      // Inner World: The Spirit Guide
+  // -- CLOCKWORK RABBITS (Hazards) --
+  // Located in Inner World, blocking easy paths
+  const rabbits = [
+      { x: 20, y: 30 }, { x: 10, y: 36 }, { x: 30, y: 36 }
+  ];
+  rabbits.forEach((r, i) => {
       entities.push({
-          id: `spirit_${s.id}`, x: s.x, y: s.y, name: 'Spirit', color: '#00ffff', interactionType: 'DIALOGUE', isSolid: false, visibleIn: WorldType.INNER_WORLD,
-          rotation: s.correct, // Spirit always faces correct way
-          onInteract: () => alert("The spirit stares intently in a specific direction...")
+          id: `rabbit_${i}`, x: r.x, y: r.y, name: 'Clockwork Rabbit', color: '#ff00ff', interactionType: 'DIALOGUE', isSolid: true, visibleIn: WorldType.INNER_WORLD,
+          onInteract: ({ worldType }) => {
+               // Only dangerous in Inner World
+               alert("TARGET ACQUIRED. INTRUDER DETECTED. (The mechanical rabbit blocks the way. Switch to Reality to bypass it.)");
+          }
       });
   });
 
-  if (solvedStatues === 4 && !statueKey) {
-      // Reward appears in center of room
+  // -- MOON GATE PUZZLE --
+  // Located at Y=5. Blocking the boss.
+  if (!moonGateOpen) {
       entities.push({
-          id: 'statue_reward', x: 34.5, y: 35, name: 'Statue Key', color: 'gold', interactionType: 'ITEM', isSolid: false, visibleIn: 'BOTH',
-          onInteract: ({ addItem, setFlag }) => {
-               addItem("Statue Key", "Statue Key");
-               setFlag("KEY_STATUE");
-               alert("A click echoes. A golden key materializes.");
-          }
-      });
-  }
-
-  // -- GARDEN PUZZLE --
-  // Lantern (Reality) - Requires Keys to unlock Garden access?
-  // Let's say the garden is open but the Lantern is the puzzle.
-  if (!lanternLit) {
-      entities.push({
-          id: 'garden_lantern', x: 12, y: 22, name: 'Stone Lantern', color: '#555', interactionType: 'PUZZLE', isSolid: true, visibleIn: WorldType.REALITY,
+          id: 'moon_gate_lock', x: 20, y: 5, name: 'Moon Gate', color: '#333', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
           onInteract: ({ hasItem, setFlag }) => {
-              if (hasItem("Archive Key") && hasItem("Statue Key")) {
-                  setFlag("LANTERN_LIT");
-                  alert("You insert both keys. The lantern ignites with a spiritual blue flame!");
+              if (heldFragments < 4) {
+                  alert("The gate has 4 empty recesses. It seems to require Jade Fragments.");
+                  return;
+              }
+              // Simple simulation of the puzzle input
+              const answer = window.prompt("Arrange the phases (Enter numbers 1-4):\n1. New Moon (朔)\n2. Waxing Moon (上弦)\n3. Full Moon (望)\n4. Waning Moon (下弦)\n\nClue: 'Reverse the flow of time.'");
+              
+              // Correct Order: Full(3) -> Waning(4) -> New(1) -> Waxing(2)
+              // OR strictly reverse cycle: Full -> Waning -> New -> Waxing.
+              // Let's accept "3412" based on the prompt "望→下弦→朔→上弦"
+              if (answer === "3412" || answer === "3,4,1,2") {
+                  setFlag("MOON_GATE_OPEN");
+                  alert("The jade fragments glow in reverse order. Time seems to flow backward for a moment. The gate opens.");
               } else {
-                  alert("It has two keyholes. You need the Archive Key and Statue Key.");
+                  alert("The mechanism jams. That is not the correct order of time.");
               }
           }
       });
-  } else {
-      // Lit Lantern Visual
-      entities.push({
-          id: 'garden_lantern_lit', x: 12, y: 22, name: 'Lit Lantern', color: '#00f', interactionType: 'DIALOGUE', isSolid: true, visibleIn: 'BOTH',
-          onInteract: () => alert("The light pierces into the other world.")
-      });
   }
 
-  // -- THE LOOP BREAKER --
-  // The Painting is in the Secret Room (28-32, 10-15).
-  // Access via Bridge (requires Inner World + Lantern Lit).
+  // -- THE PAINTING & LOOP --
+  // Painting at (18, 15).
   if (!paintingTorn) {
       entities.push({
-          id: 'loop_painting', x: 30, y: 12, name: 'Loop Painting', color: '#FFD700', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
+          id: 'magic_painting', x: 18, y: 15, name: 'Painting', color: '#888', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
           onInteract: ({ setFlag, worldType }) => {
-              if (worldType === WorldType.INNER_WORLD) {
-                  setFlag("PAINTING_TORN");
-                  alert("You tear the cursed painting! The air shimmers. The loop in the North is broken.");
+              if (worldType === WorldType.REALITY) {
+                  alert("A painting of 'Thirty-six Views of Mount Fuji'. It looks normal.");
               } else {
-                  alert("A beautiful painting of a bamboo forest. It feels... infinite.");
+                  // Inner World
+                  const choice = window.confirm("The painting shows 'Reimu Worshipping Money'. It looks like a cheap sticker covering the wall. Tear it off?");
+                  if (choice) {
+                      setFlag("PAINTING_TORN");
+                      alert("You tear down the poster! A cold wind blows from the hole in the wall.");
+                  }
               }
           }
       });
+
+      // LOOP TRIGGERS
+      // If player crosses Y=12 in the corridor (X 18-22), teleport back to Y=24
+      // BUT, we must allow them to enter the SECRET PATH (X=17).
+      for (let x = 18; x <= 22; x++) {
+          triggers[`${x},${LOOP_TRIGGER_Y}`] = {
+              type: 'TELEPORT', targetX: x, targetY: LOOP_TARGET_Y, flashEffect: true,
+              message: "You walked forward, but found yourself back at the start..."
+          };
+      }
   }
 
   // -- BOSS --
-  if (paintingTorn) {
+  if (moonGateOpen) {
        entities.push({
-          id: 'reimu_boss', x: 20, y: 3, name: 'Greedy Reimu', color: '#ff0000', interactionType: 'BATTLE', isSolid: true, visibleIn: 'BOTH',
+          id: 'reimu_boss', x: 20, y: 2, name: 'Greedy Reimu', color: '#ff0000', interactionType: 'BATTLE', isSolid: true, visibleIn: 'BOTH',
           onInteract: onReimuInteract
       });
-  }
-
-  // --- 3. TRIGGERS (LOOP) ---
-  // The Loop protects the North.
-  if (!paintingTorn) {
-      for (let x = 18; x <= 22; x++) {
-          triggers[`${x},${LOOP_TOP_TRIGGER}`] = {
-              type: 'TELEPORT', targetX: x, targetY: LOOP_TOP_TARGET, flashEffect: true
-          };
-          triggers[`${x},${LOOP_BOTTOM_TRIGGER}`] = {
-               type: 'TELEPORT', targetX: x, targetY: LOOP_BOTTOM_TARGET, flashEffect: true
-          };
-      }
   }
 
   return {
@@ -313,7 +247,7 @@ export const getStage1Data = (
     tiles,
     entities,
     triggers,
-    spawnPoint: { x: 20, y: 46 },
+    spawnPoint: { x: 20, y: 44 },
     objectiveText
   };
 };
@@ -333,56 +267,74 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
 
     if (type === TileType.VOID) return null;
 
-    // BASE FLOORS
-    if (type === TileType.FLOOR || type === TileType.BRIDGE || type === TileType.SEAL) {
-        let bg = isReality ? '#1a1a1a' : '#2a0000'; // Dark Grey vs Dark Red
-        if (type === TileType.BRIDGE) bg = isReality ? '#000' : '#00ffff'; // Invisible vs Glowing Cyan
-        
-        return (
-            <div key={`${x}-${y}`} style={{ ...style, backgroundColor: bg }} className={`border-r border-b ${isReality ? 'border-gray-800' : 'border-red-900'}`}>
-                {type === TileType.BRIDGE && isReality && (
-                    <div className="w-full h-full bg-blue-900 opacity-50 animate-pulse"></div> // Water effect in reality
-                )}
-                 {type === TileType.BRIDGE && !isReality && (
-                    <div className="w-full h-full shadow-[0_0_20px_cyan] bg-cyan-900/50 border border-cyan-400"></div> 
-                )}
-                {type === TileType.SEAL && (
-                    <div className="absolute inset-0 flex items-center justify-center opacity-30">
-                         <span className="text-2xl">{isReality ? '🧿' : '🚫'}</span>
+    // --- FLOOR RENDERING ---
+    if (type === TileType.FLOOR || type === TileType.PATH || type === TileType.SECRET_DOOR) {
+        // REALITY: Old Wood / Dust
+        if (isReality) {
+             return (
+                <div key={`${x}-${y}`} style={style} className="bg-[#2d241b] border-r border-b border-[#1a1510] relative">
+                    <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' viewBox=\'0 0 20 20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M1 1h2v2H1V1zm4 4h2v2H5V5zm4 4h2v2H9V9zm4 4h2v2h-2v-2zm4 4h2v2h-2v-2z\' fill=\'%23ffffff\' fill-opacity=\'0.2\' fill-rule=\'evenodd\'/%3E%3C/svg%3E")'}}></div>
+                </div>
+             );
+        } 
+        // INNER WORLD: Gold Bricks
+        else {
+             return (
+                <div key={`${x}-${y}`} style={style} className="bg-[#aa8800] border border-[#ffd700] shadow-[inset_0_0_10px_#664400]">
+                    <div className="w-full h-full opacity-20 flex items-center justify-center text-4xl text-yellow-200">
+                        ¥
                     </div>
-                )}
-            </div>
-        );
+                </div>
+             );
+        }
     }
     
-    // WATER
-    if (type === TileType.WATER) {
-        return (
-            <div key={`${x}-${y}`} style={style} className={`${isReality ? 'bg-blue-900' : 'bg-red-700'} transition-colors duration-1000`}>
-                <div className="w-full h-full opacity-30 animate-pulse" style={{backgroundImage: 'radial-gradient(circle, white 2px, transparent 3px)', backgroundSize: '16px 16px'}}></div>
-            </div>
-        );
-    }
-
-    // WALLS
-    if (type === TileType.WALL || type === TileType.BOOKSHELF) {
-        return (
-            <div key={`${x}-${y}`} style={style} className="bg-[#0a0a0a] border border-gray-700 relative overflow-hidden">
-                {type === TileType.BOOKSHELF && (
-                    <div className="w-full h-full flex flex-col justify-around px-1">
-                        <div className={`h-2 ${isReality ? 'bg-yellow-900' : 'bg-purple-900'}`}></div>
-                        <div className={`h-2 ${isReality ? 'bg-yellow-800' : 'bg-purple-800'}`}></div>
-                        <div className={`h-2 ${isReality ? 'bg-yellow-900' : 'bg-purple-900'}`}></div>
+    // --- WALL RENDERING ---
+    if (type === TileType.WALL || type === TileType.MOON_GATE || type === TileType.PAINTING || type === TileType.BOOKSHELF) {
+        // REALITY: Shoji Screen / Wood Wall
+        if (isReality) {
+            if (type === TileType.PAINTING) {
+                 return (
+                    <div key={`${x}-${y}`} style={style} className="bg-[#1a1510] border border-gray-800 flex items-center justify-center">
+                        <div className="w-3/4 h-3/4 bg-blue-900 border-4 border-yellow-900 overflow-hidden relative">
+                             <div className="absolute bottom-0 w-full h-1/2 bg-white/20 transform skew-y-12"></div> {/* Mt Fuji hint */}
+                        </div>
                     </div>
-                )}
-            </div>
-        );
-    }
+                );
+            }
+            if (type === TileType.MOON_GATE) {
+                return <div key={`${x}-${y}`} style={style} className="bg-gray-900 border-4 border-gray-600 flex items-center justify-center text-gray-500 font-serif text-xs">MOON GATE</div>;
+            }
 
-    // PROPS
-    if (type === TileType.PILLAR) return <div key={`${x}-${y}`} style={style} className="bg-black border-x-4 border-gray-600 rounded-sm" />;
-    if (type === TileType.LANTERN) return <div key={`${x}-${y}`} style={style} className="bg-orange-900/30 border border-orange-500 box-border m-2 w-12 h-12 shadow-[0_0_10px_orange]" />;
-    if (type === TileType.FURNACE) return <div key={`${x}-${y}`} style={style} className="bg-gray-800 border-4 border-red-500" />;
+            return (
+                <div key={`${x}-${y}`} style={style} className="bg-[#1a110d] border-b-4 border-black">
+                     <div className="w-full h-full border-x-8 border-[#2d241b] opacity-50"></div>
+                </div>
+            );
+        } 
+        // INNER WORLD: Red Charms / Gold Wall
+        else {
+             if (type === TileType.PAINTING) {
+                 return (
+                    <div key={`${x}-${y}`} style={style} className="bg-[#aa8800] border border-yellow-500 flex items-center justify-center">
+                        <div className="w-full h-full bg-red-600 flex items-center justify-center border-4 border-gold text-white font-bold text-xs text-center p-1">
+                             REIMU SHRINE DONATE NOW
+                        </div>
+                    </div>
+                );
+            }
+            if (type === TileType.MOON_GATE) {
+                return <div key={`${x}-${y}`} style={style} className="bg-[#330000] border-4 border-[#FFD700] shadow-[0_0_20px_red] z-10"></div>;
+            }
+
+            return (
+                <div key={`${x}-${y}`} style={style} className="bg-[#440000] border border-yellow-600 overflow-hidden">
+                    <div className="absolute top-1 left-1 w-4 h-6 bg-yellow-200 text-[8px] text-red-900 text-center leading-none border border-red-900">大吉</div>
+                    <div className="absolute bottom-2 right-2 w-4 h-6 bg-yellow-200 text-[8px] text-red-900 text-center leading-none border border-red-900">封</div>
+                </div>
+            );
+        }
+    }
 
     return null;
   };
@@ -394,19 +346,27 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
         {mapData.entities.map(entity => {
             if (entity.visibleIn !== 'BOTH' && entity.visibleIn !== worldType) return null;
             
-            // Entity Visuals
+            // Custom Visuals for Fragments
+            if (entity.id.includes("pickup_Fragment")) {
+                 if (isReality) {
+                     // Invisible but interactable hint
+                     return (
+                         <div key={entity.id} 
+                              className="absolute z-30 w-16 h-16 hover:bg-white/10 cursor-pointer rounded-full"
+                              style={{ left: entity.x * TILE_SIZE, top: entity.y * TILE_SIZE }}
+                         />
+                     );
+                 }
+            }
+
+            // General Entity Rendering
             let innerContent = null;
-            let rot = entity.rotation || 0;
-            const rotStyle = { transform: `rotate(${rot * 90}deg)` };
-
-            if (entity.id.includes('statue')) innerContent = <div style={rotStyle} className="text-3xl">🗿</div>;
-            else if (entity.id.includes('spirit')) innerContent = <div style={rotStyle} className="text-3xl opacity-70">👻</div>;
-            else if (entity.id.includes('furnace')) innerContent = <div className="text-2xl">🔥</div>;
-            else if (entity.id === 'reimu_boss') innerContent = <div className="text-4xl animate-bounce">⛩️</div>;
-            else if (entity.id.includes('painting')) innerContent = <div className="w-8 h-10 bg-yellow-600 border-2 border-white"></div>;
-            else if (entity.interactionType === 'ITEM') innerContent = <div className="text-xl animate-pulse">✨</div>;
-            else innerContent = <div className="w-4 h-4 rounded-full bg-white"></div>;
-
+            if (entity.id.includes('hint_Fragment')) innerContent = <div className="w-full h-full rounded-full border-4 border-red-500 animate-ping opacity-50"></div>;
+            else if (entity.id.includes('rabbit')) innerContent = <div className="text-4xl animate-bounce">🐇</div>;
+            else if (entity.id === 'reimu_boss') innerContent = <div className="text-5xl drop-shadow-[0_0_10px_red]">⛩️</div>;
+            else if (entity.interactionType === 'ITEM') innerContent = <div className="text-2xl animate-pulse">📦</div>;
+            else if (entity.interactionType === 'READ') innerContent = <div className="text-2xl bg-white text-black px-1">📄</div>;
+            
             return (
                 <div key={entity.id}
                     className="absolute z-20 flex flex-col items-center justify-center pointer-events-none"
@@ -423,8 +383,9 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
             );
         })}
         
-        {/* Atmosphere Overlay */}
-        <div className={`absolute inset-0 pointer-events-none mix-blend-multiply opacity-40 ${isReality ? 'bg-blue-900/20' : 'bg-red-900/40'}`}></div>
+        {/* Dynamic Atmosphere Overlay */}
+        <div className={`absolute inset-0 pointer-events-none mix-blend-overlay transition-colors duration-1000 ${isReality ? 'bg-black/40' : 'bg-yellow-500/10'}`}></div>
+        {!isReality && <div className="absolute inset-0 pointer-events-none opacity-20" style={{backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, #ffd700 10px, #ffd700 11px)'}}></div>}
     </div>
   );
 };

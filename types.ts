@@ -110,7 +110,14 @@ export enum TileType {
   BOOKSHELF = 13,
   FURNACE = 14,
   STATUE = 15,
-  ASHES = 16
+  ASHES = 16,
+
+  // Kaguya Route Specific
+  GOLD_FLOOR = 17,
+  CHARM_WALL = 18,
+  MOON_GATE = 19,
+  PAINTING = 20,
+  SECRET_DOOR = 21
 }
 
 export enum WorldType {
