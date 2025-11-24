@@ -79,6 +79,19 @@ const App: React.FC = () => {
     if (sprite) updateAssetRecord(char.id, 'sprite', sprite);
     const portrait = await fetchAsset(char.id, char.name, char.description, 'portrait', char.visualPrompt);
     if (portrait) updateAssetRecord(char.id, 'portrait', portrait);
+    
+    // Load Scenario Background
+    const scenario = SCENARIOS[charId];
+    setLoadingStatus(`Materializing ${scenario.locationName}...`);
+    const bg = await fetchAsset(
+        `${scenario.id}_MAP`, 
+        scenario.locationName, 
+        scenario.description, 
+        'background', 
+        scenario.locationVisualPrompt
+    );
+    if (bg) setLoadedAssets(prev => ({...prev, backgrounds: {...prev.backgrounds, [`${scenario.id}_MAP`]: bg}}));
+
     setLoadingStatus(null);
   };
 
@@ -105,7 +118,8 @@ const App: React.FC = () => {
     const scenario = SCENARIOS[id];
     setCurrentScenario(scenario);
     
-    if (!loadedAssets.sprites[id] || !loadedAssets.portraits[id]) {
+    // Check if we need to load assets
+    if (!loadedAssets.sprites[id] || !loadedAssets.portraits[id] || !loadedAssets.backgrounds[`${scenario.id}_MAP`]) {
         await loadCharacterAssets(id);
     }
     setGameState(GameState.EXPLORATION);
@@ -189,7 +203,7 @@ const App: React.FC = () => {
                 {Object.values(CHARACTERS).map((char) => {
                     const isKaguya = char.id === CharacterId.KAGUYA;
                     const scenario = SCENARIOS[char.id];
-                    const isReady = loadedAssets.sprites[char.id] && loadedAssets.portraits[char.id];
+                    const isReady = loadedAssets.sprites[char.id] && loadedAssets.portraits[char.id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
 
                     return (
                     <div 
@@ -248,7 +262,8 @@ const App: React.FC = () => {
           <Exploration 
             character={getCurrentCharacter()} 
             scenarioEnemies={currentScenario.enemies}
-            onEncounter={handleEncounter} 
+            onEncounter={handleEncounter}
+            backgroundUrl={loadedAssets.backgrounds[`${currentScenario.id}_MAP`]?.url}
           />
         );
 

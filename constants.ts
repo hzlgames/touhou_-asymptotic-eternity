@@ -52,7 +52,7 @@ const STAGE_1_REIMU: Enemy = {
     hp: 3000,
     maxHp: 3000,
     description: 'A mirror version of Reimu obsessed with money.',
-    visualPrompt: 'Reimu Hakurei, anime style, holding a calculator and overflowing money bags, eyes shaped like yen symbols ($), wicked greedy grin, red and white miko outfit modified with gold coins.',
+    visualPrompt: 'Reimu Hakurei as a corrupted greedy shrine maiden, pixel art game sprite. She holds a golden abacus in one hand and overflowing money bags in the other. Her eyes have Yen symbols in them. She wears a dark red and black modified miko outfit with gold coins attached. Cyberpunk glitch effects. Full body, standing pose, isolated on green background.',
     spellCardName: 'Treasure "Yin-Yang Loot Box"',
     flavorText: "That's an illegal entry fee! Pay up 100,000 yen!",
     difficulty: 2,
@@ -178,6 +178,8 @@ export const SCENARIOS: Record<CharacterId, Scenario> = {
         subtitle: 'The Loss of Eternity',
         description: 'Search for Eirin in a world where you are slowly becoming mortal. You fear the "Happy Ending".',
         themeColor: '#0B0B3B',
+        locationName: 'Eientei: Möbius Corridor',
+        locationVisualPrompt: 'Anime background art of a long, dark traditional Japanese wooden corridor in Eientei at night. Surreal atmosphere, infinite loop, blue moonlight streaming through shoji screens. Dust motes in the air. High quality, Makoto Shinkai style.',
         enemies: [
             STAGE_1_REIMU,
             STAGE_2_MOKOU_ILLUSION,
@@ -193,6 +195,8 @@ export const SCENARIOS: Record<CharacterId, Scenario> = {
         subtitle: 'The Illusion of Death',
         description: 'Hunt the culprit in a nightmare where you might actually die. You despise the "Easy Way Out".',
         themeColor: '#2A0A0A',
+        locationName: 'Burning Bamboo Forest',
+        locationVisualPrompt: 'Top down RPG map background of a bamboo forest at night, consumed by blue and red spectral flames. Floating paper talismans everywhere. Cyberpunk digital glitch effects on the bamboo. High detail 2D game art.',
         enemies: [
             STAGE_1_MARISA,
             STAGE_2_KAGUYA_ILLUSION,

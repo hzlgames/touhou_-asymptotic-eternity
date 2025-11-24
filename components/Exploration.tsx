@@ -1,191 +1,390 @@
 
-import React, { useEffect, useState, useRef } from 'react';
-import { Character, Enemy } from '../types';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Character, Enemy, MapData, MapEntity, TileType, WorldType } from '../types';
+import Stage1Eientei, { getStage1Data, TILE_SIZE } from './stages/Stage1Eientei';
 
 interface ExplorationProps {
   character: Character;
   scenarioEnemies: Enemy[];
   onEncounter: (enemy: Enemy) => void;
+  backgroundUrl?: string;
 }
 
-const MAP_SIZE = 20; // 20x20 grid
-const TILE_SIZE = 30;
-
-const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, onEncounter }) => {
-  const [pos, setPos] = useState({ x: 10, y: 10 });
-  const [message, setMessage] = useState("Seek the broken mirror fragments...");
-  const [isWalking, setIsWalking] = useState(false);
-  const [direction, setDirection] = useState(1); // 1 right, -1 left
+const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, onEncounter, backgroundUrl }) => {
+  // --- ENGINE STATE ---
+  const [worldType, setWorldType] = useState<WorldType>(WorldType.REALITY);
+  const [sanity, setSanity] = useState(100);
+  const [flags, setFlags] = useState<Set<string>>(new Set());
+  const [inventory, setInventory] = useState<Set<string>>(new Set());
+  const [mapData, setMapData] = useState<MapData | null>(null);
   
-  // Animation State
-  const [frame, setFrame] = useState(0); // 0: Idle, 1: Walk
+  // Physics & FX
+  const [playerPos, setPlayerPos] = useState({ x: 0, y: 0 });
+  const [isWalking, setIsWalking] = useState(false);
+  const [direction, setDirection] = useState(1);
+  const [interactionTarget, setInteractionTarget] = useState<MapEntity | null>(null);
+  const [dialogue, setDialogue] = useState<{title: string, text: string, choices?: string[]} | null>(null);
+  const [flashOpacity, setFlashOpacity] = useState(0); // Teleport effect
 
-  // Simple map generation (0: grass, 1: tree)
-  const mapRef = useRef<number[][]>([]);
-
-  useEffect(() => {
-    const newMap = [];
-    for (let y = 0; y < MAP_SIZE; y++) {
-      const row = [];
-      for (let x = 0; x < MAP_SIZE; x++) {
-        // More walls/obstacles in mirror world
-        row.push(Math.random() < 0.15 ? 1 : 0);
-      }
-      newMap.push(row);
-    }
-    mapRef.current = newMap;
+  // --- INITIALIZATION ---
+  const handleReimuEncounter = useCallback(() => {
+     setDialogue({
+         title: "Greedy Reimu (Mirror)",
+         text: "Hold it right there! You didn't think you could enter the Inner Sanctum without paying the entry fee, did you? Look at all this money! It's MINE!"
+     });
   }, []);
 
-  // Animation Loop
+  // Load Map Logic when flags change
   useEffect(() => {
-    if (!isWalking) {
-        setFrame(0);
-        return;
-    }
+    const data = getStage1Data(
+        flags, 
+        inventory,
+        handleReimuEncounter
+    );
+    setMapData(data);
     
-    const interval = setInterval(() => {
-        setFrame(prev => (prev === 0 ? 1 : 0));
-    }, 200); // Switch frames every 200ms while walking
+    // Set spawn only on first load
+    if (playerPos.x === 0 && playerPos.y === 0) {
+        setPlayerPos(data.spawnPoint);
+    }
+  }, [flags, inventory, handleReimuEncounter]); 
 
-    return () => clearInterval(interval);
-  }, [isWalking]);
+  // --- INPUT & GAME LOOP ---
+  const keysRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const { key } = e;
-      let dx = 0;
-      let dy = 0;
-
-      if (key === 'ArrowUp' || key === 'w') dy = -1;
-      if (key === 'ArrowDown' || key === 's') dy = 1;
-      if (key === 'ArrowLeft' || key === 'a') { dx = -1; setDirection(-1); }
-      if (key === 'ArrowRight' || key === 'd') { dx = 1; setDirection(1); }
-
-      if (dx === 0 && dy === 0) return;
-      
-      setIsWalking(true);
-
-      setPos((prev) => {
-        const nx = Math.max(0, Math.min(MAP_SIZE - 1, prev.x + dx));
-        const ny = Math.max(0, Math.min(MAP_SIZE - 1, prev.y + dy));
+    const handleKeyDown = (e: KeyboardEvent) => { 
+        keysRef.current[e.key] = true;
         
-        if (mapRef.current[ny] && mapRef.current[ny][nx] === 1) {
-            return prev;
+        // Lens Toggle
+        if (e.code === 'Space' && !dialogue) {
+            setWorldType(prev => prev === WorldType.REALITY ? WorldType.INNER_WORLD : WorldType.REALITY);
         }
-        return { x: nx, y: ny };
-      });
-
-      // Encounter rate
-      if (Math.random() < 0.08) { 
-        triggerEncounter();
-      }
+        
+        // Interaction
+        if ((e.key === 'z' || e.key === 'Enter') && !dialogue && interactionTarget) {
+            handleInteraction(interactionTarget);
+        }
+        
+        // Close Dialogue
+        if ((e.key === 'z' || e.key === 'Enter') && dialogue) {
+            if (dialogue.title.includes("Reimu")) {
+                const reimu = scenarioEnemies.find(e => e.name.includes('Reimu'));
+                if (reimu) onEncounter(reimu);
+            } else {
+                setDialogue(null);
+            }
+        }
     };
-
-    const handleKeyUp = () => setIsWalking(false);
-
+    const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key] = false; };
+    
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+
+    // GAME LOOP
+    const loop = setInterval(() => {
+        if (!mapData || dialogue) return;
+
+        // 0. FX Decay
+        if (flashOpacity > 0) setFlashOpacity(prev => Math.max(0, prev - 0.1));
+
+        // 1. Sanity Drain
+        if (worldType === WorldType.INNER_WORLD) {
+            setSanity(prev => Math.max(0, prev - 0.1));
+             if (sanity <= 0) {
+                 setWorldType(WorldType.REALITY);
+                 setDialogue({ title: "Sanity Depleted", text: "The chaotic waves of the Inner World are too strong. You are forced back to reality." });
+             }
+        } else {
+            setSanity(prev => Math.min(100, prev + 0.3));
+        }
+
+        // 2. Movement
+        let dx = 0;
+        let dy = 0;
+        const speed = 0.15; // Slightly faster for better feel
+
+        if (keysRef.current['ArrowUp'] || keysRef.current['w']) dy = -speed;
+        if (keysRef.current['ArrowDown'] || keysRef.current['s']) dy = speed;
+        if (keysRef.current['ArrowLeft'] || keysRef.current['a']) { dx = -speed; setDirection(-1); }
+        if (keysRef.current['ArrowRight'] || keysRef.current['d']) { dx = speed; setDirection(1); }
+
+        if (dx !== 0 || dy !== 0) {
+            setIsWalking(true);
+            const nextX = playerPos.x + dx;
+            const nextY = playerPos.y + dy;
+
+            // Collision Check (Hitbox based)
+            if (isWalkable(nextX, nextY, mapData, worldType)) {
+                setPlayerPos({ x: nextX, y: nextY });
+                checkTriggers(nextX, nextY, mapData);
+            } else if (isWalkable(nextX, playerPos.y, mapData, worldType)) {
+                // Sliding along walls (X only)
+                setPlayerPos({ x: nextX, y: playerPos.y });
+                checkTriggers(nextX, playerPos.y, mapData);
+            } else if (isWalkable(playerPos.x, nextY, mapData, worldType)) {
+                // Sliding along walls (Y only)
+                setPlayerPos({ x: playerPos.x, y: nextY });
+                checkTriggers(playerPos.x, nextY, mapData);
+            }
+        } else {
+            setIsWalking(false);
+        }
+
+        // 3. Target Finding
+        updateInteractionTarget(playerPos, mapData, worldType);
+
+    }, 16);
+
     return () => {
+        clearInterval(loop);
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mapData, playerPos, worldType, dialogue, interactionTarget, sanity, flashOpacity]);
 
-  const triggerEncounter = () => {
-    // Progress through enemies sequentially or randomly for now? 
-    // GDD implies sequential stages, but for open world feeling we'll random pick from list
-    const randomEnemy = scenarioEnemies[Math.floor(Math.random() * scenarioEnemies.length)];
-    setMessage(`Mirror Reflection Detected: ${randomEnemy.name}!`);
-    setIsWalking(false);
-    setTimeout(() => {
-      onEncounter(randomEnemy);
-    }, 1000);
+  // --- LOGIC HELPERS ---
+
+  const isWalkable = (x: number, y: number, data: MapData, world: WorldType) => {
+      // Bounds
+      if (x < 0 || x >= data.width || y < 0 || y >= data.height) return false;
+
+      // Hitbox Size (Player is smaller than a full tile)
+      const hitBoxSize = 0.3; 
+      
+      // check 4 corners
+      const points = [
+          { px: x - hitBoxSize, py: y - hitBoxSize },
+          { px: x + hitBoxSize, py: y - hitBoxSize },
+          { px: x - hitBoxSize, py: y + hitBoxSize },
+          { px: x + hitBoxSize, py: y + hitBoxSize }
+      ];
+
+      for (const p of points) {
+          const tileX = Math.floor(p.px);
+          const tileY = Math.floor(p.py);
+          const tile = data.tiles[tileY]?.[tileX];
+          
+          if (tile === TileType.WALL || tile === TileType.VOID || tile === TileType.LOCKED_DOOR || tile === TileType.PILLAR) return false;
+      }
+
+      // Entity Collision
+      for (const ent of data.entities) {
+          if (ent.isSolid && (ent.visibleIn === 'BOTH' || ent.visibleIn === world)) {
+              if (ent.hideFlag && flags.has(ent.hideFlag)) continue;
+              if (ent.reqFlag && !flags.has(ent.reqFlag)) continue;
+
+              const dist = Math.sqrt(Math.pow(x - ent.x, 2) + Math.pow(y - ent.y, 2));
+              if (dist < 0.6) return false; // Entity Radius
+          }
+      }
+      return true;
   };
 
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#0B0B3B] text-white pixel-font">
-      <h1 className="text-lg text-blue-200 mb-4 tracking-widest font-serif italic">EXPLORING THE MIRROR WORLD</h1>
+  const checkTriggers = (x: number, y: number, data: MapData) => {
+      const tileX = Math.floor(x);
+      const tileY = Math.floor(y);
+      const key = `${tileX},${tileY}`;
+      const trigger = data.triggers[key];
       
-      <div 
-        className="relative bg-[#1a1a2e] border-4 border-[#C0C0C0] shadow-[0_0_20px_rgba(192,192,192,0.3)] overflow-hidden"
-        style={{ 
-          width: MAP_SIZE * TILE_SIZE, 
-          height: MAP_SIZE * TILE_SIZE,
-          imageRendering: 'pixelated'
-        }}
-      >
-        {/* Render Map */}
-        {mapRef.current.map((row, y) => (
-          row.map((tile, x) => {
-             if (tile === 1) {
-               return (
-                 <div 
-                    key={`${x}-${y}`}
-                    className="absolute bg-[#4A5568] opacity-80"
-                    style={{
-                        width: TILE_SIZE,
-                        height: TILE_SIZE,
-                        left: x * TILE_SIZE,
-                        top: y * TILE_SIZE,
-                        boxShadow: 'inset 2px 2px 0px #718096',
-                        clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)' // Crystal shape hint
-                    }}
-                 />
-               )
-             }
-             return null;
-          })
-        ))}
+      if (trigger) {
+          if (trigger.type === 'TELEPORT' && trigger.targetX !== undefined) {
+              // Preserve decimal offset for smooth transition
+              const offsetX = x - tileX;
+              const offsetY = y - tileY;
+              
+              setPlayerPos({ 
+                  x: trigger.targetX + offsetX, 
+                  y: (trigger.targetY || tileY) + offsetY 
+              });
+              
+              if (trigger.flashEffect) setFlashOpacity(1);
+          }
+      }
+  };
 
-        {/* Grid Overlay for Retro Feel */}
-        <div className="absolute inset-0 opacity-20 pointer-events-none" 
-             style={{ backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)', backgroundSize: `${TILE_SIZE}px ${TILE_SIZE}px` }}>
-        </div>
+  const updateInteractionTarget = (pos: {x:number, y:number}, data: MapData, world: WorldType) => {
+      let nearest: MapEntity | null = null;
+      let minDst = 1.0;
+      for (const ent of data.entities) {
+          if (ent.visibleIn !== 'BOTH' && ent.visibleIn !== world) continue;
+          if (ent.hideFlag && flags.has(ent.hideFlag)) continue;
+          if (ent.reqFlag && !flags.has(ent.reqFlag)) continue;
+          
+          const dist = Math.sqrt(Math.pow(pos.x - ent.x, 2) + Math.pow(pos.y - ent.y, 2));
+          if (dist < minDst) {
+              minDst = dist;
+              nearest = ent;
+          }
+      }
+      setInteractionTarget(nearest);
+  };
 
-        {/* Render Player */}
+  const handleInteraction = (entity: MapEntity) => {
+      const helpers = {
+          setFlag: (f: string) => setFlags(prev => new Set(prev).add(f)),
+          hasFlag: (f: string) => flags.has(f),
+          addItem: (id: string, name: string) => {
+              setInventory(prev => new Set(prev).add(name));
+              setDialogue({ title: "Item Get!", text: `You obtained: ${name}` });
+          },
+          hasItem: (id: string) => inventory.has(id),
+          worldType
+      };
+
+      if (entity.id === 'puzzle_painting') {
+          if (worldType === WorldType.REALITY) {
+              setDialogue({ title: "Painting", text: "A painting of 'Thirty-six Views of Mount Fuji'. The eyes seem to follow you." });
+          } else {
+              setDialogue({ title: "Odd Painting", text: "This painting has turned into a 'Hakurei Shrine Worship' poster. You tear it down in disgust." });
+              setFlags(prev => new Set(prev).add('PAINTING_TORN'));
+          }
+      } 
+      else if (entity.onInteract) {
+          entity.onInteract(helpers);
+          if (entity.interactionType === 'DIALOGUE' && !dialogue) {
+               // Fallback if no dialogue set
+          }
+      }
+  };
+
+  // --- CAMERA ---
+  const getCameraOffset = () => {
+      if (!mapData) return { x: 0, y: 0 };
+      const cx = playerPos.x * TILE_SIZE - window.innerWidth / 2;
+      const cy = playerPos.y * TILE_SIZE - window.innerHeight / 2;
+      const maxW = mapData.width * TILE_SIZE - window.innerWidth;
+      const maxH = mapData.height * TILE_SIZE - window.innerHeight;
+      return {
+          x: -Math.max(0, Math.min(cx, maxW)),
+          y: -Math.max(0, Math.min(cy, maxH))
+      };
+  };
+  const camera = getCameraOffset();
+
+  if (!mapData) return <div>Loading...</div>;
+
+  return (
+    <div className="relative w-full h-screen overflow-hidden bg-black font-serif">
+        
+        {/* WORLD RENDERER */}
         <div 
-          className="absolute transition-all duration-200 ease-linear z-10"
-          style={{
-            width: TILE_SIZE,
-            height: TILE_SIZE,
-            left: pos.x * TILE_SIZE,
-            top: pos.y * TILE_SIZE,
-          }}
+            className="will-change-transform"
+            style={{ transform: `translate3d(${camera.x}px, ${camera.y}px, 0)` }}
         >
-            {character.pixelSpriteUrl ? (
-                 <img 
-                    src={frame === 0 ? character.pixelSpriteUrl : character.pixelSpriteUrlWalk} 
-                    alt={character.name}
-                    className="w-full h-full object-contain"
-                    style={{ 
-                        transform: `scaleX(${direction})`,
-                        filter: 'drop-shadow(0 4px 4px rgba(0,0,0,0.5))' 
-                    }}
-                 />
-            ) : (
-                <div 
-                    className="w-full h-full"
-                    style={{
-                        backgroundColor: character.pixelColor,
-                        boxShadow: `0 0 10px ${character.pixelColor}`,
-                        borderRadius: '50% 50% 0 0'
-                    }}
-                />
-            )}
+            <Stage1Eientei mapData={mapData} worldType={worldType} />
+
+            {/* Player */}
+            <div 
+                className="absolute z-30 transition-none" // Removed transition for snappy input response
+                style={{
+                    left: (playerPos.x * TILE_SIZE) - (TILE_SIZE/2), // Center sprite
+                    top: (playerPos.y * TILE_SIZE) - (TILE_SIZE), // Pivot at feet
+                    width: TILE_SIZE,
+                    height: TILE_SIZE,
+                }}
+            >
+                {character.pixelSpriteUrl ? (
+                    <img 
+                        src={isWalking ? character.pixelSpriteUrlWalk : character.pixelSpriteUrl} 
+                        className="w-full h-full object-contain drop-shadow-lg"
+                        style={{ transform: `scaleX(${direction})` }}
+                    />
+                ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-end">
+                        <div className="w-10 h-16 bg-pink-500 rounded-t-lg border-2 border-white"></div>
+                    </div>
+                )}
+            </div>
         </div>
 
-        {/* Vignette */}
-        <div className="absolute inset-0 pointer-events-none z-20" 
-             style={{
-               background: 'radial-gradient(circle, transparent 40%, #000 100%)'
-             }}
-        />
-      </div>
+        {/* UI HUD */}
+        <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
+            <h1 className="text-xl text-white bg-black/60 px-4 py-2 border-l-4 border-blue-500">
+                Stage 1: Eientei
+            </h1>
+            
+            <div className="flex items-center gap-2 bg-black/60 px-4 py-2 rounded-r-lg">
+                <div className={`text-2xl ${worldType === 'INNER_WORLD' ? 'text-red-500 animate-pulse' : 'text-blue-200'}`}>
+                    {worldType === 'INNER_WORLD' ? '👁️' : '🧿'}
+                </div>
+                <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div 
+                        className={`h-full transition-all duration-300 ${sanity < 30 ? 'bg-red-600' : 'bg-blue-400'}`}
+                        style={{ width: `${sanity}%` }}
+                    />
+                </div>
+            </div>
+            
+            <div className="text-xs text-gray-400 mt-1 font-mono">
+                [SPACE] Lens: {worldType}
+            </div>
+        </div>
 
-      <div className="mt-6 p-4 border-t-2 border-b-2 border-double border-[#C0C0C0] bg-black/60 w-[600px] min-h-[80px] flex items-center justify-center backdrop-blur-sm">
-        <p className="text-sm font-mono text-blue-100">{message}</p>
-      </div>
+        {/* OBJECTIVE HUD */}
+        <div className="absolute top-4 right-4 z-50">
+            <div className="bg-black/80 border border-[#FFD700] p-3 rounded text-white min-w-[200px]">
+                <h3 className="text-[#FFD700] text-xs font-bold uppercase tracking-widest mb-1 border-b border-gray-700 pb-1">Current Objective</h3>
+                <p className="text-sm font-serif italic">{mapData.objectiveText}</p>
+                {inventory.size > 0 && (
+                     <div className="mt-2 pt-2 border-t border-gray-700">
+                         <div className="text-xs text-gray-500">Key Items:</div>
+                         <div className="flex gap-1 flex-wrap mt-1">
+                             {Array.from(inventory).map((item, i) => (
+                                 <span key={i} className="text-xs bg-blue-900/50 px-1 border border-blue-500 rounded">{item.split(':')[0]}</span>
+                             ))}
+                         </div>
+                     </div>
+                )}
+            </div>
+        </div>
+
+        {/* INTERACT PROMPT */}
+        {interactionTarget && !dialogue && (
+            <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 animate-bounce">
+                <div className="bg-white text-black px-6 py-2 font-bold rounded-full shadow-[0_0_20px_white] flex items-center gap-2">
+                   <span>⚡</span> Z / ENTER
+                </div>
+            </div>
+        )}
+
+        {/* DIALOGUE BOX */}
+        {dialogue && (
+            <div className="absolute inset-x-0 bottom-0 min-h-[250px] bg-gradient-to-t from-black via-black/95 to-transparent z-[60] flex flex-col items-center justify-end pb-10">
+                <div className="w-full max-w-4xl bg-[#1a0505] border-t-2 border-[#FFD700] p-6 shadow-2xl animate-slide-up flex gap-6">
+                    <div className="w-32 h-32 bg-black border border-white shrink-0 overflow-hidden relative">
+                         <img src={character.portraitUrl} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-1 flex flex-col">
+                        <h3 className="text-[#FFD700] text-lg mb-2 font-bold tracking-wider">{dialogue.title}</h3>
+                        <p className="text-white text-xl leading-relaxed font-serif">{dialogue.text}</p>
+                        
+                        <div className="mt-auto flex justify-end pt-4">
+                             <div className="text-gray-400 text-sm animate-pulse">[Press Z to Continue]</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* TELEPORT FLASH EFFECT */}
+        <div 
+            className="absolute inset-0 bg-white pointer-events-none z-[100]"
+            style={{ opacity: flashOpacity }}
+        />
+
+        {/* FULL SCREEN LENS EFFECT */}
+        <div className={`absolute inset-0 pointer-events-none transition-all duration-700 z-40
+            ${worldType === 'INNER_WORLD' 
+                ? 'shadow-[inset_0_0_100px_rgba(255,0,0,0.5)] backdrop-contrast-125 backdrop-hue-rotate-15' 
+                : 'shadow-[inset_0_0_150px_rgba(0,0,0,0.8)] backdrop-brightness-75'
+            }
+        `} />
+        
+        {/* NOISE EFFECT FOR INNER WORLD */}
+        {worldType === 'INNER_WORLD' && (
+             <div className="absolute inset-0 z-30 pointer-events-none opacity-10 mix-blend-overlay" style={{backgroundImage: 'url(https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif)', backgroundSize: 'cover'}}></div>
+        )}
     </div>
   );
 };

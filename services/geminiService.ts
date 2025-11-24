@@ -1,5 +1,4 @@
 
-import { GoogleGenAI } from "@google/genai";
 import { AssetType, AssetResult } from "./assetStorage";
 import { removeBackground } from "../utils/imageProcessing";
 
@@ -17,17 +16,15 @@ export const getOrGenerateAsset = async (
   console.log(`[Gemini] Generating ${name} (${type})...`);
   
   try {
-    // Ensure API Key is ready
-    if ((window as any).aistudio) {
-        const hasKey = await (window as any).aistudio.hasSelectedApiKey();
-        if (!hasKey) {
-            await (window as any).aistudio.openSelectKey();
-        }
+    // Custom API Configuration
+    const API_URL = "https://new.12ai.org";
+    const MODEL = "gemini-3-pro-image-preview";
+    const API_KEY = process.env.API_KEY;
+
+    if (!API_KEY) {
+        throw new Error("API_KEY is missing in environment variables");
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const model = 'gemini-3-pro-image-preview';
-    
     let prompt = "";
     let aspectRatio = "1:1";
     let needsBackgroundRemoval = false;
@@ -58,32 +55,56 @@ export const getOrGenerateAsset = async (
         needsBackgroundRemoval = false; 
     }
 
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: {
-        parts: [{ text: prompt }],
-      },
-      config: {
-        imageConfig: {
-          aspectRatio: aspectRatio,
-          imageSize: '1K',
-        },
-      },
-    });
+    // Raw Fetch Implementation to support custom host and sk-xx keys
+    const response = await fetch(
+        `${API_URL}/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    imageConfig: {
+                        aspectRatio: aspectRatio,
+                        imageSize: '1K',
+                    },
+                },
+            }),
+        }
+    );
 
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API Error ${response.status}: ${errorText}`);
+    }
+
+    const result = await response.json();
     let rawDataUrl: string | null = null;
-    if (response.candidates?.[0]?.content?.parts) {
-        for (const part of response.candidates[0].content.parts) {
+
+    if (result.candidates?.[0]?.content?.parts) {
+        for (const part of result.candidates[0].content.parts) {
+            // Handle inlineData (Base64)
             if (part.inlineData && part.inlineData.data) {
                 const base64String = part.inlineData.data;
                 const mimeType = part.inlineData.mimeType || 'image/png';
                 rawDataUrl = `data:${mimeType};base64,${base64String}`;
                 break;
             }
+            // Handle text response containing markdown image (fallback)
+            if (part.text) {
+                const match = part.text.match(/!\[image\]\(data:image\/[^;]+;base64,([A-Za-z0-9+/=]+)\)/);
+                if (match && match[1]) {
+                     rawDataUrl = `data:image/png;base64,${match[1]}`;
+                     break;
+                }
+            }
         }
     }
 
     if (!rawDataUrl) {
+        console.error("Full API Response:", result);
         throw new Error("No image data returned from API");
     }
 
