@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Exploration from './components/Exploration';
 import DanmakuBattle from './components/DanmakuBattle';
@@ -204,6 +203,7 @@ const App: React.FC = () => {
             loadedAssets.props['PROP_GOHEI'] &&
             loadedAssets.props['PROP_DIGITAL_TORII'] &&
             loadedAssets.props['PROP_SHRINE_OFFICE'] &&
+            loadedAssets.props['PROP_SHREDDER'] && 
             loadedAssets.props['PROP_REIMU_WORK']
         );
     }
@@ -305,7 +305,15 @@ const App: React.FC = () => {
                     const basicReady = loadedAssets.sprites[char.id] && loadedAssets.portraits[char.id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
                     let propsReady = true;
                     if (isKaguya) {
-                        propsReady = !!(loadedAssets.props['PROP_ASSET_TREE'] && loadedAssets.props['PROP_GOHEI'] && loadedAssets.props['PROP_REIMU_WORK']);
+                        // Strict check for ALL props to force generation
+                        propsReady = !!(
+                            loadedAssets.props['PROP_ASSET_TREE'] && 
+                            loadedAssets.props['PROP_GOHEI'] && 
+                            loadedAssets.props['PROP_DIGITAL_TORII'] &&
+                            loadedAssets.props['PROP_SHRINE_OFFICE'] &&
+                            loadedAssets.props['PROP_SHREDDER'] &&
+                            loadedAssets.props['PROP_REIMU_WORK']
+                        );
                     }
                     const isReady = basicReady && propsReady;
 
