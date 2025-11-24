@@ -483,68 +483,49 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
           height: TILE_SIZE,
       };
 
-      // --- NEW ASSETS (Trees & Gohei) ---
-      
+      // --- ASSET TREES ---
       if (entity.name === 'Asset Tree') {
-          // Check for generated asset
-          if (propSprites['PROP_ASSET_TREE']) {
-              return (
-                   <div key={entity.id} style={style} className="absolute z-20 -top-16 w-full h-[128px] pointer-events-none flex justify-center">
+          const sprite = propSprites['PROP_ASSET_TREE'];
+          // Extract ID number from entity.id (e.g. tree_L_38 -> 38)
+          const treeIdNum = entity.id.split('_').pop()?.padStart(3, '0') || '000';
+          
+          return (
+               <div key={entity.id} style={style} className="absolute z-20 -top-16 w-full h-[128px] pointer-events-none flex justify-center">
+                   {sprite ? (
                        <img 
-                            src={propSprites['PROP_ASSET_TREE']} 
+                            src={sprite} 
                             className={`h-full object-contain ${!isReality ? 'grayscale brightness-50 contrast-150' : ''}`}
                             alt="Tree" 
                        />
-                       {/* Overlay tag on top of image */}
-                       <div className="absolute bottom-8 bg-white border border-black text-[6px] font-mono px-1 shadow-[0_0_5px_white] rotate-12">
-                          ID: 049
+                   ) : (
+                       <div className="w-full h-full flex items-end justify-center pb-4 text-[10px] text-red-500 font-mono animate-pulse">
+                           [ASSET MISSING]
                        </div>
+                   )}
+                   {/* Overlay tag on top of image */}
+                   <div className="absolute bottom-8 bg-white border border-black text-[6px] font-mono px-1 shadow-[0_0_5px_white] rotate-12">
+                      ID: {treeIdNum}
                    </div>
-              );
-          }
-          // Fallback CSS
-          return (
-              <div key={entity.id} style={style} className="absolute z-20 -top-8 h-[96px] flex flex-col items-center justify-end pointer-events-none">
-                  {/* Visual Simulation of Tree */}
-                  <div className={`w-16 h-24 ${isReality ? 'bg-green-900' : 'bg-red-900 grayscale'} relative rounded-t-full shadow-sm`}>
-                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-8 bg-[#3e2723]"></div>
-                      {/* The Asset Tag */}
-                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white border border-black text-[6px] font-mono px-1 shadow-[0_0_5px_white] rotate-12">
-                          ID: 049
-                      </div>
-                      {/* Branches */}
-                      <div className="absolute top-4 -left-2 w-6 h-6 bg-green-800 rounded-full"></div>
-                      <div className="absolute top-8 right-0 w-8 h-8 bg-green-700 rounded-full"></div>
-                  </div>
-              </div>
+               </div>
           );
       }
 
+      // --- GOHEI BARRIERS ---
       if (entity.name === 'Gohei Barrier') {
-          if (propSprites['PROP_GOHEI']) {
-              return (
-                   <div key={entity.id} style={style} className="absolute z-20 -top-8 w-full h-[96px] pointer-events-none flex justify-center items-end">
+          const sprite = propSprites['PROP_GOHEI'];
+          return (
+               <div key={entity.id} style={style} className="absolute z-20 -top-8 w-full h-[96px] pointer-events-none flex justify-center items-end">
+                   {sprite ? (
                        <img 
-                            src={propSprites['PROP_GOHEI']} 
+                            src={sprite} 
                             className="h-full object-contain"
                             alt="Gohei" 
                        />
-                       {!isReality && <div className="absolute top-0 w-full h-full bg-red-500 blur-xl opacity-20 animate-pulse"></div>}
-                   </div>
-              );
-          }
-
-          // Fallback
-          return (
-              <div key={entity.id} style={style} className="absolute z-20 flex items-end justify-center pointer-events-none">
-                  <div className="relative w-2 h-12 bg-gray-300 rotate-12 origin-bottom border border-gray-600">
-                      {/* Zig Zag Paper */}
-                      <div className="absolute top-1 -left-4 w-8 h-4 bg-white skew-x-12 border border-gray-300 shadow-sm"></div>
-                      <div className="absolute top-3 left-2 w-6 h-4 bg-white -skew-x-12 border border-gray-300 shadow-sm"></div>
-                      {/* Glow in inner world */}
-                      {!isReality && <div className="absolute -top-2 -left-2 w-8 h-8 bg-red-500 blur-lg opacity-50 animate-pulse"></div>}
-                  </div>
-              </div>
+                   ) : (
+                        <div className="w-2 h-12 bg-red-900/50 animate-pulse"></div>
+                   )}
+                   {!isReality && <div className="absolute top-0 w-full h-full bg-red-500 blur-xl opacity-20 animate-pulse"></div>}
+               </div>
           );
       }
 

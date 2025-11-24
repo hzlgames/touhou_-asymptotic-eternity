@@ -51,7 +51,10 @@ const App: React.FC = () => {
         try {
             setLoadingStatus(`Writing to Reality Layer: ${name}...`);
             const success = await saveAssetToFS(id, type, result.url);
-            if (success) return { url: result.url, isLocal: true };
+            if (success) {
+                console.log(`[App] Saved ${name} to ${type} folder.`);
+                return { url: result.url, isLocal: true };
+            }
         } catch (e) { console.error("Auto-save failed", e); }
     }
     return result;
@@ -110,7 +113,7 @@ const App: React.FC = () => {
             'Asset Tree', 
             'A tree with a barcode.', 
             'sprite', 
-            'Pixel art cyberpunk tree, dead branches, glowing digital barcode tag attached to trunk. High contrast, neon green accents. Transparent background.'
+            'Object on transparent background. Pixel art cyberpunk tree, dead branches, glowing digital barcode tag attached to trunk. High contrast, neon green accents. Transparent background.'
         );
         if (tree) updateAssetRecord('PROP_ASSET_TREE', 'sprite', tree);
 
@@ -120,7 +123,7 @@ const App: React.FC = () => {
             'Gohei Barrier',
             'A shinto wand used as a fence.',
             'sprite',
-            'Pixel art Shinto Gohei wand stuck in the ground vertically. The paper streamers are glowing neon red. Cyberpunk style. Transparent background.'
+            'Object on transparent background. Pixel art Shinto Gohei wand stuck in the ground vertically. The paper streamers are glowing neon red. Cyberpunk style. Transparent background.'
         );
         if (gohei) updateAssetRecord('PROP_GOHEI', 'sprite', gohei);
     }
