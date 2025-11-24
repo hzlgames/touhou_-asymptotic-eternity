@@ -63,9 +63,16 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
     const handleKeyDown = (e: KeyboardEvent) => { 
         keysRef.current[e.key] = true;
         
-        // Lens Toggle
+        // Lens Toggle Logic (Requires Item)
         if (e.code === 'Space' && !dialogue) {
-            setWorldType(prev => prev === WorldType.REALITY ? WorldType.INNER_WORLD : WorldType.REALITY);
+            if (inventory.has('Obscure Lens')) {
+                setWorldType(prev => prev === WorldType.REALITY ? WorldType.INNER_WORLD : WorldType.REALITY);
+            } else {
+                setDialogue({
+                    title: "System Restriction",
+                    text: "You sense a hidden layer to reality, but your naked eyes cannot perceive the 'Inner World'. You need a catalyst."
+                });
+            }
         }
         
         // Interaction
@@ -147,7 +154,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [mapData, playerGridPos, worldType, dialogue, interactionTarget, sanity, flashOpacity, isMoving]);
+  }, [mapData, playerGridPos, worldType, dialogue, interactionTarget, sanity, flashOpacity, isMoving, inventory]);
 
   // --- LOGIC HELPERS ---
 
@@ -170,6 +177,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
       // Special Case: Secret Door is walkable
       if (tile === TileType.SECRET_DOOR) return true;
+      if (tile === TileType.PATH) return true; // Path is always walkable
 
       if (blockers.includes(tile)) return false;
 
@@ -328,7 +336,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             </div>
             
             <div className="text-xs text-gray-400 mt-1 font-mono">
-                [SPACE] LENS: {worldType}
+                [SPACE] LENS: {inventory.has('Obscure Lens') ? worldType : 'MISSING'}
             </div>
         </div>
 

@@ -29,6 +29,7 @@ export const getStage1Data = (
   const bookBurned = flags.has('BOOK_BURNED');
   const paintingTorn = flags.has('PAINTING_TORN');
   const hasKey = inventory.has('Archive Key');
+  const hasLens = inventory.has('Obscure Lens');
   
   // Statue Rotation Helper
   const getRotation = (id: string) => {
@@ -46,11 +47,12 @@ export const getStage1Data = (
 
   // Objective Logic
   let objectiveText = "Proceed to the Administration Desk (Shrine).";
-  if (!lanternsLit) objectiveText = "A firewall (Data Stream) blocks the path. Activate the Auth Nodes in Reality.";
+  if (!hasLens) objectiveText = "Search the area for a way to perceive anomalies.";
+  else if (!lanternsLit) objectiveText = "A firewall (Data Stream) blocks the path. Activate the Auth Nodes in Reality.";
   else if (!hasKey) objectiveText = "Access the Archive Room. Incinerate the 'Corrupt Data' to find the admin key.";
   else if (!statuesCorrect) objectiveText = "The Security Drones are watching. Align their vision with the glitches.";
   else if (!paintingTorn) objectiveText = "Infinite Redirect Loop detected. Find the anomaly in the Compliance Posters.";
-  else objectiveText = "Loop terminated. The texture of reality is peeling off. Enter the Breach.";
+  else objectiveText = "Loop terminated. Enter the System Breach to reach the Administrator.";
 
   // --- 1. BUILD GEOMETRY ---
   for (let y = 0; y < MAP_HEIGHT; y++) {
@@ -101,10 +103,12 @@ export const getStage1Data = (
       // 6. SECRET PATH (x: 23, y: 5-20)
       // Only accessible if painting is torn
       if (paintingTorn) {
+          // This creates a narrow walkable strip to the right of the main corridor
           if (x === 23 && y >= 5 && y <= 20) {
-              tile = TileType.PATH; // Visual distinction
-              if (x === 23 && y === 20) tile = TileType.SECRET_DOOR;
+              tile = TileType.PATH; 
           }
+          // The Secret Door Entrance (Right next to the painting position x=22, y=20)
+          if (x === 23 && y === 20) tile = TileType.SECRET_DOOR;
       }
 
       // 7. BOSS ROOM (y: 0-5)
@@ -118,6 +122,18 @@ export const getStage1Data = (
   }
 
   // --- 2. ENTITIES & PUZZLES ---
+
+  // === LENS ITEM (SPAWN) ===
+  if (!inventory.has('Obscure Lens')) {
+      entities.push({
+          id: 'item_lens', x: 22, y: 46,
+          name: 'Shard of Glass', color: '#ff00ff', interactionType: 'ITEM', isSolid: true, visibleIn: WorldType.REALITY,
+          onInteract: ({ addItem }) => {
+              addItem('Obscure Lens', 'Obscure Lens');
+              alert("You picked up the [Obscure Lens].\n\nIt is cold to the touch. When you look through it, the world's colors invert.\n(Press SPACE to toggle the Inner World view).");
+          }
+      });
+  }
 
   // === GARDEN PUZZLE (LANTERNS -> NODES) ===
   ['LANTERN_L', 'LANTERN_R'].forEach((id, idx) => {
@@ -141,6 +157,24 @@ export const getStage1Data = (
           }
       });
   });
+
+  // === INNER WORLD DATA PACKETS (LORE) ===
+  // Positioned near the river/data stream
+  if (worldType === WorldType.INNER_WORLD) {
+      const deletedFiles = [
+          { x: 12, y: 35, name: 'trash_01.dat', text: "DELETED FILE: 'Tea_Break.exe'\nREASON: Inefficient use of processing time. 0.05% productivity loss detected." },
+          { x: 28, y: 35, name: 'trash_02.dat', text: "DELETED FILE: 'Donation_Greed.wav'\nREASON: Emotional variance exceeds safety threshold. The Administrator does not need money. The Administrator needs RESULTS." },
+          { x: 20, y: 36, name: 'trash_03.dat', text: "SYSTEM LOG: 'Reimu Hakurei' personality core has been archived. Loading 'Admin_Bot_v9.0'." }
+      ];
+
+      deletedFiles.forEach((file, i) => {
+          entities.push({
+              id: `del_data_${i}`, x: file.x, y: file.y,
+              name: 'Corrupt Data Packet', color: '#ff0000', interactionType: 'READ', isSolid: true, visibleIn: WorldType.INNER_WORLD,
+              onInteract: () => alert(file.text)
+          });
+      });
+  }
 
   // === ARCHIVE PUZZLE (BOOK -> ERROR LOG) ===
   if (!inventory.has('Error Log') && !bookBurned) {
@@ -311,8 +345,16 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
         );
     }
     if (type === TileType.PATH) {
+        // Special rendering for the Secret Path (The untextured developer path)
         return (
-            <div key={`${x}-${y}`} style={style} className="bg-[#111] shadow-inner border border-[#333]"></div>
+            <div key={`${x}-${y}`} style={style} className="bg-purple-900/50 relative overflow-hidden">
+                <div className="absolute inset-0 border border-green-500/30"></div>
+                {/* Grid Lines */}
+                <div className="w-full h-full opacity-30" style={{
+                        backgroundImage: 'linear-gradient(green 1px, transparent 1px), linear-gradient(90deg, green 1px, transparent 1px)',
+                        backgroundSize: '16px 16px'
+                }}></div>
+            </div>
         );
     }
 
@@ -380,6 +422,26 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType }) => {
           width: TILE_SIZE,
           height: TILE_SIZE,
       };
+
+      if (entity.name.includes('Data Packet')) {
+          return (
+            <div key={entity.id} style={style} className="absolute z-20 flex items-center justify-center pointer-events-none animate-bounce">
+                <div className="w-8 h-8 bg-red-900/80 border border-red-500 rotate-45 flex items-center justify-center shadow-[0_0_10px_red]">
+                    <span className="text-xs text-white -rotate-45 font-mono">DEL</span>
+                </div>
+            </div>
+          );
+      }
+
+      if (entity.id === 'item_lens') {
+          return (
+            <div key={entity.id} style={style} className="absolute z-20 flex items-center justify-center pointer-events-none animate-pulse">
+                 <div className="w-8 h-8 bg-black border-2 border-purple-500 rounded-full flex items-center justify-center shadow-[0_0_15px_purple]">
+                     <span className="text-lg">👁️</span>
+                 </div>
+            </div>
+          );
+      }
 
       if (entity.id.includes('LANTERN')) {
           const isLit = entity.color === '#00ff00';
