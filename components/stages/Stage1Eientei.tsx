@@ -9,8 +9,8 @@ const MAP_WIDTH = 40;
 const MAP_HEIGHT = 50;
 
 // The Loop
-const LOOP_TRIGGER_Y = 8;
-const LOOP_RESET_Y = 18;
+const LOOP_TRIGGER_Y = 14; // Moved down slightly to fit Torii
+const LOOP_RESET_Y = 24;
 
 export const getStage1Data = (
     flags: Set<string>,
@@ -76,36 +76,38 @@ export const getStage1Data = (
           if (x >= 5 && x <= 35) tile = TileType.FLOOR; 
       }
 
-      // 3. WEST ARCHIVES (x: 2-12, y: 10-28)
-      if (x >= 2 && x <= 12 && y >= 10 && y <= 28) {
+      // 3. WEST ARCHIVES (x: 2-12, y: 15-28)
+      if (x >= 2 && x <= 12 && y >= 15 && y <= 28) {
           tile = TileType.FLOOR;
-          if (x === 2 || x === 12 || y === 10 || y === 28) tile = TileType.WALL;
+          if (x === 2 || x === 12 || y === 15 || y === 28) tile = TileType.WALL;
           if (x === 12 && y === 24) tile = TileType.FLOOR; // Doorway
           if (tile === TileType.FLOOR && x > 3 && x < 11 && y % 3 === 0) tile = TileType.BOOKSHELF;
       }
 
-      // 4. EAST STATUE HALL (x: 28-38, y: 10-28)
-      if (x >= 28 && x <= 38 && y >= 10 && y <= 28) {
+      // 4. EAST STATUE HALL (x: 28-38, y: 15-28)
+      if (x >= 28 && x <= 38 && y >= 15 && y <= 28) {
           tile = TileType.FLOOR;
-          if (x === 28 || x === 38 || y === 10 || y === 28) tile = TileType.WALL;
+          if (x === 28 || x === 38 || y === 15 || y === 28) tile = TileType.WALL;
           if (x === 28 && y === 24) tile = TileType.FLOOR; // Doorway
       }
 
-      // 5. NORTH CORRIDOR & BOSS (x: 18-22, y: 0-20)
-      if (x >= 18 && x <= 22 && y < 20) {
+      // 5. NORTH CORRIDOR (The Approach) (x: 18-22, y: 8-20)
+      if (x >= 18 && x <= 22 && y < 20 && y >= 8) {
           tile = TileType.FLOOR;
           if (x === 18 || x === 22) tile = TileType.WALL;
       }
 
-      // 6. SECRET PATH (x: 23, y: 5-20)
+      // 6. SECRET PATH (x: 23, y: 8-20)
       if (paintingTorn) {
-          if (x === 23 && y >= 5 && y <= 20) tile = TileType.PATH; 
+          if (x === 23 && y >= 8 && y <= 20) tile = TileType.PATH; 
           if (x === 23 && y === 20) tile = TileType.SECRET_DOOR;
       }
 
-      // 7. BOSS ROOM (y: 0-5)
-      if (y <= 5 && x >= 15 && x <= 25) {
+      // 7. BOSS ROOM (Admin Shrine) (y: 0-8)
+      if (y < 8 && x >= 15 && x <= 25) {
            tile = TileType.FLOOR;
+           // Checkerboard floor for boss room
+           if ((x+y)%2 === 0) tile = TileType.GOLD_FLOOR;
       }
 
       row.push(tile);
@@ -113,17 +115,15 @@ export const getStage1Data = (
     tiles.push(row);
   }
 
-  // --- 2. DECORATIVE ENTITIES (Visuals) ---
+  // --- 2. DECORATIVE ENTITIES ---
   
-  // Add "Asset Tagged Trees" along the garden path
+  // Asset Trees
   for (let y = 38; y < 48; y += 4) {
-      // Left side trees
       entities.push({
           id: `tree_L_${y}`, x: 9, y: y,
           name: 'Asset Tree', color: 'green', interactionType: 'READ', isSolid: true, visibleIn: 'BOTH',
           onInteract: () => alert(`ASSET TAG: TREE_NATURAL_0${y}\nSTATUS: Awaiting pruning logic.`)
       });
-      // Right side trees
       entities.push({
           id: `tree_R_${y}`, x: 31, y: y,
           name: 'Asset Tree', color: 'green', interactionType: 'READ', isSolid: true, visibleIn: 'BOTH',
@@ -131,9 +131,9 @@ export const getStage1Data = (
       });
   }
 
-  // Add "Gohei Barriers" (The fences)
+  // Gohei Barriers
   for (let y = 30; y < 48; y+= 2) {
-       if (y === 34 || y === 36) continue; // Skip river
+       if (y === 34 || y === 36) continue;
        entities.push({
            id: `gohei_L_${y}`, x: 10, y: y,
            name: 'Gohei Barrier', color: 'white', interactionType: 'READ', isSolid: false, visibleIn: WorldType.REALITY,
@@ -145,6 +145,30 @@ export const getStage1Data = (
            onInteract: () => alert("A sacred wand repurposed as a construction fence.")
        });
   }
+
+  // === BOSS ROOM PROPS ===
+  
+  // 1. Digital Torii Gate (Entrance to Boss Room)
+  entities.push({
+      id: 'digital_torii', x: 20, y: 9,
+      name: 'Digital Torii', color: 'blue', interactionType: 'READ', isSolid: false, visibleIn: 'BOTH',
+      onInteract: () => alert("PROTOCOL GATEWAY: Enter to submit Ticket #001.")
+  });
+
+  // 2. The Shrine Office (Background)
+  entities.push({
+      id: 'shrine_desk', x: 20, y: 2,
+      name: 'Shrine Office', color: 'red', interactionType: 'READ', isSolid: true, visibleIn: 'BOTH',
+      onInteract: () => alert("The nerve center of Gensokyo's Reality Layer. It smells like ozone and old tea.")
+  });
+
+  // 3. The Shredder (Donation Box)
+  entities.push({
+      id: 'shredder', x: 24, y: 4,
+      name: 'Donation Shredder', color: 'gray', interactionType: 'READ', isSolid: true, visibleIn: 'BOTH',
+      onInteract: () => alert(isReality ? "A donation box modified into a paper shredder. It's aggressively chewing on a 'Feature Request' form." : "THE MAW. IT HUNGERS FOR DATA.")
+  });
+
 
   // --- 3. INTERACTIVE ENTITIES & PUZZLES ---
 
@@ -203,13 +227,12 @@ export const getStage1Data = (
   // === ARCHIVE PUZZLE (BOOK -> ERROR LOG) ===
   if (!inventory.has('Error Log') && !bookBurned) {
       entities.push({
-          id: 'dusty_book', x: 6, y: 15, 
+          id: 'dusty_book', x: 6, y: 20, 
           name: 'Corrupt File', color: 'transparent', interactionType: 'ITEM', isSolid: false, visibleIn: WorldType.REALITY,
           onInteract: ({ addItem }) => addItem('Error Log', 'Error Log')
       });
   }
 
-  // Eirin's Terminal
   entities.push({
       id: 'eirin_log', x: 4, y: 27,
       name: 'Encrypted Tablet', color: '#888', interactionType: 'READ', isSolid: true, visibleIn: WorldType.REALITY,
@@ -219,7 +242,7 @@ export const getStage1Data = (
   });
 
   entities.push({
-      id: 'furnace', x: 7, y: 12,
+      id: 'furnace', x: 7, y: 16,
       name: 'System Recycler', color: '#555', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
       onInteract: ({ hasItem, setFlag, worldType, addItem }) => {
           if (worldType === WorldType.INNER_WORLD) {
@@ -240,16 +263,15 @@ export const getStage1Data = (
 
   // === STATUE PUZZLE (STATUE -> DRONES) ===
   const statueConfig = [
-      { id: 'STATUE_NW', x: 30, y: 14, correct: 1 }, 
-      { id: 'STATUE_NE', x: 36, y: 14, correct: 2 }, 
-      { id: 'STATUE_SW', x: 30, y: 20, correct: 0 }, 
-      { id: 'STATUE_SE', x: 36, y: 20, correct: 3 }, 
+      { id: 'STATUE_NW', x: 30, y: 18, correct: 1 }, 
+      { id: 'STATUE_NE', x: 36, y: 18, correct: 2 }, 
+      { id: 'STATUE_SW', x: 30, y: 24, correct: 0 }, 
+      { id: 'STATUE_SE', x: 36, y: 24, correct: 3 }, 
   ];
 
   statueConfig.forEach(s => {
       const currentRot = getRotation(s.id);
       
-      // Reality: Click to Rotate
       entities.push({
           id: s.id, x: s.x, y: s.y,
           name: 'Security Drone', color: '#888', interactionType: 'PUZZLE', isSolid: true, visibleIn: WorldType.REALITY,
@@ -269,7 +291,6 @@ export const getStage1Data = (
           }
       });
 
-      // Inner World: Ghost Hint -> Glitch
       entities.push({
           id: `ghost_${s.id}`, x: s.x, y: s.y,
           name: 'Glitch Phantom', color: '#00ffff', interactionType: 'DIALOGUE', isSolid: true, visibleIn: WorldType.INNER_WORLD,
@@ -278,11 +299,10 @@ export const getStage1Data = (
       });
   });
 
-  // === LOOP & SECRET DOOR PUZZLE (PAINTING -> POSTER) ===
-  
+  // === LOOP & SECRET DOOR PUZZLE ===
   if (!paintingTorn) {
       entities.push({
-          id: 'secret_painting', x: 22, y: 19, // On the wall
+          id: 'secret_painting', x: 22, y: 19, 
           name: 'Compliance Poster', color: '#ff00ff', interactionType: 'PUZZLE', isSolid: true, visibleIn: 'BOTH',
           onInteract: ({ worldType, setFlag }) => {
               if (worldType === WorldType.INNER_WORLD) {
@@ -297,10 +317,8 @@ export const getStage1Data = (
               }
           }
       });
-  }
-
-  // Loop Trigger Logic
-  if (!paintingTorn) {
+      
+      // Loop Trigger
       for (let x = 18; x <= 22; x++) {
           triggers[`${x},${LOOP_TRIGGER_Y}`] = {
               type: 'TELEPORT', targetX: x, targetY: LOOP_RESET_Y, flashEffect: true,
@@ -309,9 +327,9 @@ export const getStage1Data = (
       }
   }
 
-  // === BOSS ===
+  // === BOSS ENTITY ===
   entities.push({
-      id: 'boss', x: 20, y: 3, 
+      id: 'boss', x: 20, y: 4, 
       name: 'Admin Reimu', color: 'red', interactionType: 'BATTLE', isSolid: true, visibleIn: 'BOTH',
       onInteract: onReimuInteract
   });
@@ -332,24 +350,21 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
   const isReality = worldType === WorldType.REALITY;
   const [stamps, setStamps] = useState<{id: number, x: number, y: number, type: string}[]>([]);
 
-  // Effect: Randomly generate "Stamps" falling in the Inner World
   useEffect(() => {
       if (isReality) {
           setStamps([]);
           return;
       }
-
       const interval = setInterval(() => {
-          if (Math.random() > 0.3) return; // Chance to spawn
+          if (Math.random() > 0.3) return; 
           const newStamp = {
               id: Date.now(),
-              x: Math.random() * 100, // Percent
+              x: Math.random() * 100, 
               y: Math.random() * 100,
               type: Math.random() > 0.7 ? '处决' : (Math.random() > 0.5 ? '驳回' : '受理')
           };
-          setStamps(prev => [...prev.slice(-5), newStamp]); // Keep last 6
+          setStamps(prev => [...prev.slice(-5), newStamp]);
       }, 500);
-
       return () => clearInterval(interval);
   }, [isReality]);
 
@@ -362,10 +377,9 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
         height: TILE_SIZE,
     };
 
-    if (type === TileType.WATER) { // DATA STREAM
+    if (type === TileType.WATER) { 
         return (
             <div key={`${x}-${y}`} style={style} className={`overflow-hidden transition-colors duration-1000 ${isReality ? 'bg-gray-800' : 'bg-black border border-red-500'}`}>
-                {/* Rolling code effect */}
                 <div className="w-full h-full opacity-50 flex flex-col text-[8px] leading-none font-mono text-green-500 animate-pulse">
                     {Array(10).fill(0).map((_, i) => <div key={i}>{Math.random().toString(36).substring(7)}</div>)}
                 </div>
@@ -391,11 +405,9 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
         );
     }
     if (type === TileType.PATH) {
-        // Special rendering for the Secret Path (The untextured developer path)
         return (
             <div key={`${x}-${y}`} style={style} className="bg-purple-900/50 relative overflow-hidden">
                 <div className="absolute inset-0 border border-green-500/30"></div>
-                {/* Grid Lines */}
                 <div className="w-full h-full opacity-30" style={{
                         backgroundImage: 'linear-gradient(green 1px, transparent 1px), linear-gradient(90deg, green 1px, transparent 1px)',
                         backgroundSize: '16px 16px'
@@ -406,14 +418,17 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
 
     if (type === TileType.VOID) return null;
 
-    if (type === TileType.FLOOR) {
+    if (type === TileType.FLOOR || type === TileType.GOLD_FLOOR) {
          return (
             <div key={`${x}-${y}`} style={style} className={`
                 ${isReality ? 'bg-[#e0e0e0]' : 'bg-[#2a0a0a]'} 
                 border-r border-b border-black/10
             `}>
-                {isReality && (x+y)%2===0 && (
+                {isReality && (x+y)%2===0 && type !== TileType.GOLD_FLOOR && (
                     <div className="w-full h-full border-4 border-yellow-500/20 box-border"></div>
+                )}
+                {type === TileType.GOLD_FLOOR && (
+                    <div className={`w-full h-full opacity-50 ${isReality ? 'bg-blue-900' : 'bg-red-900'}`}></div>
                 )}
             </div>
          );
@@ -426,7 +441,6 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
                 flex items-center justify-center overflow-hidden relative
             `}>
                 {isReality ? (
-                    // Reality: Caution Tape Wall (Yellow/Black Strips)
                     <>
                         <div className="absolute inset-0 bg-yellow-400"></div>
                         <div className="absolute inset-0" style={{
@@ -437,22 +451,16 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
                         </div>
                     </>
                 ) : (
-                    // Inner: Laser Wall (Red Lines)
                     <>
                         <div className="absolute inset-0 bg-red-900/20"></div>
                         <div className="w-1 h-full bg-red-600 shadow-[0_0_10px_red] animate-pulse"></div>
-                        <div className="absolute top-0 w-full h-full flex flex-col justify-between py-2 opacity-50">
-                            <div className="w-full h-[1px] bg-red-500"></div>
-                            <div className="w-full h-[1px] bg-red-500"></div>
-                            <div className="w-full h-[1px] bg-red-500"></div>
-                        </div>
                     </>
                 )}
             </div>
         );
     }
 
-    if (type === TileType.BOOKSHELF) { // SERVERS / FILES
+    if (type === TileType.BOOKSHELF) {
         return (
              <div key={`${x}-${y}`} style={style} className="bg-[#222] border border-gray-600 flex flex-col justify-end p-1">
                  {isReality ? (
@@ -483,10 +491,99 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
           height: TILE_SIZE,
       };
 
+      // --- NEW: DIGITAL TORII ---
+      if (entity.name === 'Digital Torii') {
+          const sprite = propSprites['PROP_DIGITAL_TORII'];
+          return (
+              <div key={entity.id} style={style} className="absolute z-30 flex justify-center items-end pointer-events-none">
+                  {/* Oversized rendering */}
+                  <div className="w-[300px] h-[300px] flex items-end justify-center -translate-y-4">
+                      {sprite ? (
+                          <img 
+                            src={sprite} 
+                            className={`w-full h-full object-contain drop-shadow-[0_0_15px_blue] ${!isReality ? 'hue-rotate-[140deg] brightness-75 contrast-125' : ''}`}
+                            alt="Torii" 
+                          />
+                      ) : (
+                          // Fallback
+                          <div className="w-[200px] h-[150px] border-x-8 border-t-8 border-blue-500 relative">
+                               <div className="absolute top-4 -left-4 w-[220px] h-4 bg-blue-400"></div>
+                          </div>
+                      )}
+                  </div>
+              </div>
+          )
+      }
+
+      // --- NEW: SHRINE OFFICE DESK ---
+      if (entity.name === 'Shrine Office') {
+          const sprite = propSprites['PROP_SHRINE_OFFICE'];
+          return (
+              <div key={entity.id} style={style} className="absolute z-10 flex justify-center pointer-events-none">
+                  <div className="w-[500px] h-[400px] flex items-center justify-center -translate-y-16">
+                      {sprite ? (
+                          <img 
+                            src={sprite} 
+                            className={`w-full h-full object-contain ${!isReality ? 'hue-rotate-[180deg] sepia contrast-125' : ''}`}
+                            alt="Shrine Desk" 
+                          />
+                      ) : (
+                          <div className="w-[300px] h-[200px] bg-gray-800 border-4 border-white flex items-center justify-center text-white">
+                              ADMIN DESK
+                          </div>
+                      )}
+                  </div>
+              </div>
+          )
+      }
+
+      // --- NEW: SHREDDER ---
+      if (entity.name === 'Donation Shredder') {
+          const sprite = propSprites['PROP_SHREDDER'];
+          return (
+              <div key={entity.id} style={style} className="absolute z-20 flex justify-center pointer-events-none">
+                   <div className="w-full h-[96px] -translate-y-8 flex items-end justify-center">
+                        {sprite ? (
+                            <img 
+                                src={sprite} 
+                                className={`h-full object-contain ${!isReality ? 'animate-pulse drop-shadow-[0_0_10px_red]' : ''}`}
+                                alt="Shredder" 
+                            />
+                        ) : (
+                            <div className="w-12 h-12 bg-red-900 border-2 border-white"></div>
+                        )}
+                   </div>
+                   {/* Paper particles effect if Inner World */}
+                   {!isReality && <div className="absolute -top-4 w-1 h-1 bg-white animate-ping"></div>}
+              </div>
+          )
+      }
+
+      // --- BOSS / REIMU ---
+      if (entity.name === 'Admin Reimu') {
+          const sprite = propSprites['PROP_REIMU_WORK'];
+          return (
+               <div key={entity.id} style={style} className="absolute z-20 flex justify-center pointer-events-none">
+                   {sprite ? (
+                       <img 
+                            src={sprite} 
+                            className={`w-full h-full object-contain scale-125 ${!isReality ? 'brightness-50 grayscale border-red-500' : ''}`}
+                            alt="Reimu" 
+                       />
+                   ) : (
+                       <div className="w-10 h-10 bg-red-500 rounded-full border-2 border-white"></div>
+                   )}
+                   {/* Floating "Busy" Status */}
+                   <div className="absolute -top-8 bg-black/80 text-white text-[8px] px-2 py-1 rounded font-mono animate-bounce border border-red-500 whitespace-nowrap">
+                       STATUS: {isReality ? 'COMPILING...' : 'PURGING...'}
+                   </div>
+               </div>
+          );
+      }
+
       // --- ASSET TREES ---
       if (entity.name === 'Asset Tree') {
           const sprite = propSprites['PROP_ASSET_TREE'];
-          // Extract ID number from entity.id (e.g. tree_L_38 -> 38)
           const treeIdNum = entity.id.split('_').pop()?.padStart(3, '0') || '000';
           
           return (
@@ -502,7 +599,6 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
                            [ASSET MISSING]
                        </div>
                    )}
-                   {/* Overlay tag on top of image */}
                    <div className="absolute bottom-8 bg-white border border-black text-[6px] font-mono px-1 shadow-[0_0_5px_white] rotate-12">
                       ID: {treeIdNum}
                    </div>
@@ -529,8 +625,7 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
           );
       }
 
-      // --- EXISTING ASSETS ---
-
+      // --- GENERIC ENTITIES ---
       if (entity.name.includes('Data Packet')) {
           return (
             <div key={entity.id} style={style} className="absolute z-20 flex items-center justify-center pointer-events-none animate-bounce">
@@ -573,7 +668,7 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
           );
       }
 
-      if (entity.id === 'furnace') { // SHREDDER
+      if (entity.id === 'furnace') { 
           return (
             <div key={entity.id} style={style} className="absolute z-20 flex items-center justify-center pointer-events-none">
                 <div className="w-12 h-12 bg-gray-700 rounded-sm border-t-4 border-black flex items-center justify-center">
@@ -606,7 +701,6 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
                       {entity.name.includes('Glitch') ? (
                           <div className="text-3xl filter drop-shadow-[0_0_5px_cyan]">⚠️</div>
                       ) : (
-                          // Drone Eye
                           <div className="w-4 h-4 bg-red-500 rounded-full shadow-[0_0_5px_red]"></div>
                       )}
                       <div className="absolute -top-6 text-[10px] font-bold text-white bg-black/80 px-1 font-mono">
@@ -633,7 +727,6 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
         
         {/* === ATMOSPHERE LAYERS === */}
 
-        {/* REALITY: STEAM & FLUORESCENT LIGHT */}
         {isReality && (
             <>
                 {/* Cold Blue Light Filter */}
@@ -647,7 +740,6 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
             </>
         )}
 
-        {/* INNER WORLD: RED VOID & STAMPS */}
         {!isReality && (
             <>
                 {/* Red Overlay */}
@@ -659,7 +751,6 @@ const Stage1Eientei: React.FC<StageProps> = ({ mapData, worldType, propSprites }
                     backgroundSize: '100% 2px, 3px 100%'
                 }}></div>
 
-                {/* FALLING STAMPS ANIMATION */}
                 {stamps.map(s => (
                     <div 
                         key={s.id}

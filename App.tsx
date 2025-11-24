@@ -126,6 +126,46 @@ const App: React.FC = () => {
             'Object on transparent background. Pixel art Shinto Gohei wand stuck in the ground vertically. The paper streamers are glowing neon red. Cyberpunk style. Transparent background.'
         );
         if (gohei) updateAssetRecord('PROP_GOHEI', 'sprite', gohei);
+
+        // 3. Digital Torii
+        const torii = await fetchAsset(
+            'PROP_DIGITAL_TORII',
+            'Digital Torii',
+            'A cyberpunk Torii gate.',
+            'sprite',
+            'Object on transparent background. Large pixel art Torii gate made of metallic server racks and glowing blue neon lights. High tech, sci-fi Shinto style. Front view. Transparent background.'
+        );
+        if (torii) updateAssetRecord('PROP_DIGITAL_TORII', 'sprite', torii);
+
+        // 4. Shrine Office Desk
+        const shrine = await fetchAsset(
+            'PROP_SHRINE_OFFICE',
+            'Admin Shrine Desk',
+            'A massive shrine altar converted into a desk.',
+            'sprite',
+            'Object on transparent background. Huge pixel art structure: A traditional Shinto shrine roof, but the building is a giant high-tech computer desk. Multiple monitors, stacks of paper towers, server cables draped like shimenawa ropes. Cyberpunk office shrine. Transparent background.'
+        );
+        if (shrine) updateAssetRecord('PROP_SHRINE_OFFICE', 'sprite', shrine);
+
+        // 5. Shredder Box
+        const shredder = await fetchAsset(
+            'PROP_SHREDDER',
+            'Donation Shredder',
+            'A donation box that is a shredder.',
+            'sprite',
+            'Object on transparent background. Pixel art wooden offertory box (saisen-bako) modified with mechanical gears and a paper shredder slot on top. Cyberpunk style. Transparent background.'
+        );
+        if (shredder) updateAssetRecord('PROP_SHREDDER', 'sprite', shredder);
+
+        // 6. Working Reimu
+        const reimuWork = await fetchAsset(
+            'PROP_REIMU_WORK',
+            'Working Reimu',
+            'Reimu typing at a desk.',
+            'sprite',
+            'Character on transparent background. Pixel art Reimu Hakurei sitting at a desk, typing furiously on a mechanical keyboard. She looks exhausted, bags under eyes. Anime RPG style top-down. Transparent background.'
+        );
+        if (reimuWork) updateAssetRecord('PROP_REIMU_WORK', 'sprite', reimuWork);
     }
 
     setLoadingStatus(null);
@@ -159,7 +199,13 @@ const App: React.FC = () => {
     
     let propsLoaded = true;
     if (id === CharacterId.KAGUYA) {
-        propsLoaded = !!(loadedAssets.props['PROP_ASSET_TREE'] && loadedAssets.props['PROP_GOHEI']);
+        propsLoaded = !!(
+            loadedAssets.props['PROP_ASSET_TREE'] && 
+            loadedAssets.props['PROP_GOHEI'] &&
+            loadedAssets.props['PROP_DIGITAL_TORII'] &&
+            loadedAssets.props['PROP_SHRINE_OFFICE'] &&
+            loadedAssets.props['PROP_REIMU_WORK']
+        );
     }
 
     if (!basicAssetsLoaded || !propsLoaded) {
@@ -259,7 +305,7 @@ const App: React.FC = () => {
                     const basicReady = loadedAssets.sprites[char.id] && loadedAssets.portraits[char.id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
                     let propsReady = true;
                     if (isKaguya) {
-                        propsReady = !!(loadedAssets.props['PROP_ASSET_TREE'] && loadedAssets.props['PROP_GOHEI']);
+                        propsReady = !!(loadedAssets.props['PROP_ASSET_TREE'] && loadedAssets.props['PROP_GOHEI'] && loadedAssets.props['PROP_REIMU_WORK']);
                     }
                     const isReady = basicReady && propsReady;
 
