@@ -102,7 +102,15 @@ export enum TileType {
   LOCKED_DOOR = 7,
   PILLAR = 8,     // New: For corridor rhythm
   LANTERN = 9,     // New: For visual anchoring
-  SEAL = 10        // New: Floor marker for loop
+  SEAL = 10,       // New: Floor marker for loop
+  
+  // Advanced Puzzle Tiles
+  WATER = 11,
+  BRIDGE = 12,
+  BOOKSHELF = 13,
+  FURNACE = 14,
+  STATUE = 15,
+  ASHES = 16
 }
 
 export enum WorldType {
@@ -142,6 +150,9 @@ export interface MapEntity {
   visibleIn: WorldType | 'BOTH'; // Which world is this entity visible in?
   reqFlag?: string; // Only visible if flag exists
   hideFlag?: string; // Hidden if flag exists
+  
+  // Custom Data for Puzzles
+  rotation?: number; // 0=Up, 1=Right, 2=Down, 3=Left
 }
 
 export interface MapData {

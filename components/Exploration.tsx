@@ -89,13 +89,12 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         // 0. FX Decay
         if (flashOpacity > 0) setFlashOpacity(prev => Math.max(0, prev - 0.1));
         if (loopMessage) {
-             // Handled by CSS animation usually, but we can clear it if needed
-             // For now we rely on the component redraw
+             // Handled by CSS animation usually
         }
 
         // 1. Sanity Drain
         if (worldType === WorldType.INNER_WORLD) {
-            setSanity(prev => Math.max(0, prev - 0.1));
+            setSanity(prev => Math.max(0, prev - 0.05)); // Slower drain for exploration
              if (sanity <= 0) {
                  setWorldType(WorldType.REALITY);
                  setDialogue({ title: "Sanity Depleted", text: "The chaotic waves of the Inner World are too strong. You are forced back to reality." });
@@ -169,7 +168,12 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           const tileY = Math.floor(p.py);
           const tile = data.tiles[tileY]?.[tileX];
           
-          if (tile === TileType.WALL || tile === TileType.VOID || tile === TileType.LOCKED_DOOR || tile === TileType.PILLAR) return false;
+          if (tile === TileType.WALL || tile === TileType.VOID || tile === TileType.LOCKED_DOOR || tile === TileType.PILLAR || tile === TileType.BOOKSHELF || tile === TileType.FURNACE) return false;
+          
+          // WATER logic: Passable only if it's a Bridge
+          if (tile === TileType.WATER) return false;
+          // BRIDGE logic: Passable
+          if (tile === TileType.BRIDGE) return true;
       }
 
       // Entity Collision
@@ -243,15 +247,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           worldType
       };
 
-      if (entity.id === 'puzzle_painting') {
-          if (worldType === WorldType.REALITY) {
-              setDialogue({ title: "Painting", text: "A painting of 'Thirty-six Views of Mount Fuji'. The eyes seem to follow you." });
-          } else {
-              setDialogue({ title: "Odd Painting", text: "This painting has turned into a 'Hakurei Shrine Worship' poster. You tear it down in disgust." });
-              setFlags(prev => new Set(prev).add('PAINTING_TORN'));
-          }
-      } 
-      else if (entity.onInteract) {
+      if (entity.onInteract) {
           entity.onInteract(helpers);
       }
   };
@@ -263,10 +259,19 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       const cy = playerPos.y * TILE_SIZE - window.innerHeight / 2;
       const maxW = mapData.width * TILE_SIZE - window.innerWidth;
       const maxH = mapData.height * TILE_SIZE - window.innerHeight;
-      return {
-          x: -Math.max(0, Math.min(cx, maxW)),
-          y: -Math.max(0, Math.min(cy, maxH))
-      };
+      
+      // Clamp logic fixed for negative constraints
+      // If map is smaller than screen, center it
+      let tx = -cx;
+      let ty = -cy;
+      
+      if (mapData.width * TILE_SIZE < window.innerWidth) tx = (window.innerWidth - mapData.width * TILE_SIZE) / 2;
+      else tx = Math.min(0, Math.max(tx, -(mapData.width * TILE_SIZE - window.innerWidth)));
+
+      if (mapData.height * TILE_SIZE < window.innerHeight) ty = (window.innerHeight - mapData.height * TILE_SIZE) / 2;
+      else ty = Math.min(0, Math.max(ty, -(mapData.height * TILE_SIZE - window.innerHeight)));
+
+      return { x: tx, y: ty };
   };
   const camera = getCameraOffset();
 
