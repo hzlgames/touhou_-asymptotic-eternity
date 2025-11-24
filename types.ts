@@ -101,7 +101,8 @@ export enum TileType {
   PATH = 6,
   LOCKED_DOOR = 7,
   PILLAR = 8,     // New: For corridor rhythm
-  LANTERN = 9     // New: For visual anchoring
+  LANTERN = 9,     // New: For visual anchoring
+  SEAL = 10        // New: Floor marker for loop
 }
 
 export enum WorldType {

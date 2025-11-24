@@ -25,6 +25,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   const [interactionTarget, setInteractionTarget] = useState<MapEntity | null>(null);
   const [dialogue, setDialogue] = useState<{title: string, text: string, choices?: string[]} | null>(null);
   const [flashOpacity, setFlashOpacity] = useState(0); // Teleport effect
+  const [loopMessage, setLoopMessage] = useState<string | null>(null); // Feedback for infinite loop
 
   // --- INITIALIZATION ---
   const handleReimuEncounter = useCallback(() => {
@@ -87,6 +88,10 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
         // 0. FX Decay
         if (flashOpacity > 0) setFlashOpacity(prev => Math.max(0, prev - 0.1));
+        if (loopMessage) {
+             // Handled by CSS animation usually, but we can clear it if needed
+             // For now we rely on the component redraw
+        }
 
         // 1. Sanity Drain
         if (worldType === WorldType.INNER_WORLD) {
@@ -141,7 +146,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [mapData, playerPos, worldType, dialogue, interactionTarget, sanity, flashOpacity]);
+  }, [mapData, playerPos, worldType, dialogue, interactionTarget, sanity, flashOpacity, loopMessage]);
 
   // --- LOGIC HELPERS ---
 
@@ -149,10 +154,9 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       // Bounds
       if (x < 0 || x >= data.width || y < 0 || y >= data.height) return false;
 
-      // Hitbox Size (Player is smaller than a full tile)
+      // Hitbox Size
       const hitBoxSize = 0.3; 
       
-      // check 4 corners
       const points = [
           { px: x - hitBoxSize, py: y - hitBoxSize },
           { px: x + hitBoxSize, py: y - hitBoxSize },
@@ -175,7 +179,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
               if (ent.reqFlag && !flags.has(ent.reqFlag)) continue;
 
               const dist = Math.sqrt(Math.pow(x - ent.x, 2) + Math.pow(y - ent.y, 2));
-              if (dist < 0.6) return false; // Entity Radius
+              if (dist < 0.6) return false; 
           }
       }
       return true;
@@ -188,8 +192,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       const trigger = data.triggers[key];
       
       if (trigger) {
+          // Check Condition (Crucial for breaking loops)
+          if (trigger.condition && !trigger.condition(flags)) return;
+
           if (trigger.type === 'TELEPORT' && trigger.targetX !== undefined) {
-              // Preserve decimal offset for smooth transition
+              // Preserve decimal offset for smooth visual transition
               const offsetX = x - tileX;
               const offsetY = y - tileY;
               
@@ -199,6 +206,10 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
               });
               
               if (trigger.flashEffect) setFlashOpacity(1);
+              
+              // Show Feedback
+              setLoopMessage("∞ ETERNITY LOOP DETECTED ∞");
+              setTimeout(() => setLoopMessage(null), 2000);
           }
       }
   };
@@ -242,9 +253,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       } 
       else if (entity.onInteract) {
           entity.onInteract(helpers);
-          if (entity.interactionType === 'DIALOGUE' && !dialogue) {
-               // Fallback if no dialogue set
-          }
       }
   };
 
@@ -276,10 +284,10 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
             {/* Player */}
             <div 
-                className="absolute z-30 transition-none" // Removed transition for snappy input response
+                className="absolute z-30 transition-none"
                 style={{
-                    left: (playerPos.x * TILE_SIZE) - (TILE_SIZE/2), // Center sprite
-                    top: (playerPos.y * TILE_SIZE) - (TILE_SIZE), // Pivot at feet
+                    left: (playerPos.x * TILE_SIZE) - (TILE_SIZE/2),
+                    top: (playerPos.y * TILE_SIZE) - (TILE_SIZE),
                     width: TILE_SIZE,
                     height: TILE_SIZE,
                 }}
@@ -320,6 +328,15 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                 [SPACE] Lens: {worldType}
             </div>
         </div>
+
+        {/* LOOP NOTIFICATION */}
+        {loopMessage && (
+            <div className="absolute top-32 left-1/2 -translate-x-1/2 z-50 animate-pulse">
+                <div className="bg-red-900/80 border-y-2 border-[#FFD700] text-[#FFD700] px-8 py-2 font-bold tracking-[0.5em] shadow-[0_0_20px_red]">
+                    {loopMessage}
+                </div>
+            </div>
+        )}
 
         {/* OBJECTIVE HUD */}
         <div className="absolute top-4 right-4 z-50">
