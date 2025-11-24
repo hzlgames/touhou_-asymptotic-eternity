@@ -59,21 +59,25 @@ const App: React.FC = () => {
 
   const updateAssetRecord = (id: string, type: AssetType, result: { url: string, isLocal: boolean }) => {
       setLoadedAssets(prev => {
-          switch(type) {
-              case 'sprite': return {...prev, sprites: {...prev.sprites, [id]: result}};
-              case 'portrait': return {...prev, portraits: {...prev.portraits, [id]: result}};
-              case 'background': return {...prev, backgrounds: {...prev.backgrounds, [id]: result}};
-              default: return prev;
+          const next = { ...prev };
+          
+          if (type === 'portrait') next.portraits = { ...prev.portraits, [id]: result };
+          else if (type === 'background') next.backgrounds = { ...prev.backgrounds, [id]: result };
+          else if (type === 'sprite') {
+              next.sprites = { ...prev.sprites, [id]: result };
+              
+              // Sort into sub-categories for easier lookup
+              const isChar = Object.values(CharacterId).includes(id as any);
+              if (!isChar) {
+                  if (id.startsWith('PROP_')) {
+                      next.props = { ...prev.props, [id]: result };
+                  } else {
+                      next.enemySprites = { ...prev.enemySprites, [id]: result };
+                  }
+              }
           }
+          return next;
       });
-      if (type === 'sprite' && !Object.values(CharacterId).includes(id as any)) {
-           // It's either an enemy or a prop. Simple heuristic: props start with PROP_
-           if (id.startsWith('PROP_')) {
-               setLoadedAssets(prev => ({...prev, props: {...prev.props, [id]: result}}));
-           } else {
-               setLoadedAssets(prev => ({...prev, enemySprites: {...prev.enemySprites, [id]: result}}));
-           }
-      }
   };
 
   const loadCharacterAssets = async (charId: CharacterId) => {
@@ -94,7 +98,7 @@ const App: React.FC = () => {
         'background', 
         scenario.locationVisualPrompt
     );
-    if (bg) setLoadedAssets(prev => ({...prev, backgrounds: {...prev.backgrounds, [`${scenario.id}_MAP`]: bg}}));
+    if (bg) updateAssetRecord(`${scenario.id}_MAP`, 'background', bg);
 
     // Load Stage Props (New)
     if (charId === CharacterId.KAGUYA) {
@@ -127,11 +131,11 @@ const App: React.FC = () => {
   const loadEnemyAssets = async (enemy: Enemy) => {
       setLoadingStatus(`Manifesting Boss: ${enemy.name}...`);
       const sprite = await fetchAsset(enemy.name, enemy.name, enemy.description, 'sprite', enemy.visualPrompt);
-      if (sprite) setLoadedAssets(prev => ({...prev, enemySprites: {...prev.enemySprites, [enemy.name]: sprite}}));
+      if (sprite) updateAssetRecord(enemy.name, 'sprite', sprite);
 
       const bgPrompt = enemy.visualPrompt ? `${enemy.visualPrompt} (Atmospheric Background)` : enemy.description;
       const bg = await fetchAsset(`${enemy.name}_BG`, `${enemy.name} Location`, bgPrompt, 'background', bgPrompt);
-      if (bg) setLoadedAssets(prev => ({...prev, backgrounds: {...prev.backgrounds, [enemy.name]: bg}}));
+      if (bg) updateAssetRecord(`${enemy.name}_BG`, 'background', bg);
       setLoadingStatus(null);
   };
 
@@ -147,8 +151,15 @@ const App: React.FC = () => {
     const scenario = SCENARIOS[id];
     setCurrentScenario(scenario);
     
-    // Check if we need to load assets
-    if (!loadedAssets.sprites[id] || !loadedAssets.portraits[id] || !loadedAssets.backgrounds[`${scenario.id}_MAP`]) {
+    // ASSET CHECK LOGIC
+    const basicAssetsLoaded = loadedAssets.sprites[id] && loadedAssets.portraits[id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
+    
+    let propsLoaded = true;
+    if (id === CharacterId.KAGUYA) {
+        propsLoaded = !!(loadedAssets.props['PROP_ASSET_TREE'] && loadedAssets.props['PROP_GOHEI']);
+    }
+
+    if (!basicAssetsLoaded || !propsLoaded) {
         await loadCharacterAssets(id);
     }
     setGameState(GameState.EXPLORATION);
@@ -241,12 +252,18 @@ const App: React.FC = () => {
                 {Object.values(CHARACTERS).map((char) => {
                     const isKaguya = char.id === CharacterId.KAGUYA;
                     const scenario = SCENARIOS[char.id];
-                    const isReady = loadedAssets.sprites[char.id] && loadedAssets.portraits[char.id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
+                    
+                    const basicReady = loadedAssets.sprites[char.id] && loadedAssets.portraits[char.id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
+                    let propsReady = true;
+                    if (isKaguya) {
+                        propsReady = !!(loadedAssets.props['PROP_ASSET_TREE'] && loadedAssets.props['PROP_GOHEI']);
+                    }
+                    const isReady = basicReady && propsReady;
 
                     return (
                     <div 
                         key={char.id}
-                        onClick={() => isReady ? handleCharacterSelect(char.id) : loadCharacterAssets(char.id)}
+                        onClick={() => handleCharacterSelect(char.id)}
                         className={`relative group cursor-pointer border-2 transition-all duration-500 p-8 bg-black/40 backdrop-blur-sm overflow-hidden
                             ${isKaguya 
                                 ? 'border-blue-500/30 hover:border-blue-400 hover:shadow-[0_0_40px_rgba(59,130,246,0.2)]' 
