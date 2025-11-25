@@ -104,6 +104,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   }, [loadMap]); // Dependent on map loaders
 
   // Helper to create current state snapshot
+  // Defined HERE so handlers can use it
   const createSnapshot = (): SaveData => ({
       characterId: character.id,
       playerGridPos,
@@ -114,58 +115,8 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       timestamp: Date.now()
   });
 
-  // --- STABLE INPUT HANDLING ---
-  useEffect(() => {
-      const handleKeyDown = (e: KeyboardEvent) => {
-          keysRef.current[e.key] = true;
-          const s = stateRef.current;
-
-          // TAB Handling (Pause)
-          if (e.key === 'Tab') {
-              e.preventDefault(); // CRITICAL: Stop browser defaults (focus navigation)
-              e.stopPropagation();
-
-              if (s.showItemMenu) {
-                  setShowItemMenu(false);
-              } else {
-                  // Toggle Pause
-                  setIsPaused(prev => !prev);
-              }
-              return;
-          }
-
-          if (s.isPaused) return; // Block other inputs if paused
-          
-          if (e.key === 'F9') setDevMode(prev => !prev);
-          
-          if ((e.code === 'Space' || e.key === ' ') && !s.dialogue) {
-              if (s.inventory.has('Obscure Lens')) {
-                  setWorldType(prev => prev === WorldType.REALITY ? WorldType.INNER_WORLD : WorldType.REALITY);
-              } else {
-                  setDialogue({ title: "System Restriction", text: "You sense a hidden layer to reality, but your naked eyes cannot perceive the 'Inner World'. You need a catalyst." });
-              }
-          }
-          
-          if ((e.key === 'z' || e.key === 'Enter')) {
-               if (s.dialogue) {
-                   handleDialogueAdvance();
-               } else if (s.interactionTarget) {
-                   handleInteraction(s.interactionTarget);
-               }
-          }
-      };
-
-      const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key] = false; };
-      
-      window.addEventListener('keydown', handleKeyDown);
-      window.addEventListener('keyup', handleKeyUp);
-
-      return () => {
-          window.removeEventListener('keydown', handleKeyDown);
-          window.removeEventListener('keyup', handleKeyUp);
-      };
-  }, []); // EMPTY DEPENDENCY ARRAY ensures listeners are never re-bound
-
+  // --- HANDLER DEFINITIONS ---
+  // Defined in component scope to access current state/props
   const handleDialogueAdvance = () => {
     if (!dialogue) return;
     
@@ -199,6 +150,77 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         setDialogue(null);
     }
   };
+
+  const handleInteraction = (entity: MapEntity) => {
+      const helpers = {
+          setFlag: (f: string) => setFlags(prev => new Set(prev).add(f)),
+          removeFlag: (f: string) => setFlags(prev => { const next = new Set(prev); next.delete(f); return next; }),
+          hasFlag: (f: string) => flags.has(f),
+          addItem: (id: string, name: string) => { setInventory(prev => new Set(prev).add(name)); setDialogue({ title: "Item Get!", text: `You obtained: ${name}` }); },
+          hasItem: (id: string) => inventory.has(id),
+          worldType
+      };
+      if (entity.onInteract) entity.onInteract(helpers);
+  };
+
+  // --- HANDLERS REF ---
+  // Store latest handlers in a ref so the stable keydown listener can call the fresh versions
+  const handlersRef = useRef({ handleDialogueAdvance, handleInteraction });
+  useEffect(() => {
+    handlersRef.current = { handleDialogueAdvance, handleInteraction };
+  }); // Update on every render
+
+  // --- STABLE INPUT LISTENER ---
+  useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+          keysRef.current[e.key] = true;
+          const s = stateRef.current;
+
+          // TAB Handling (Pause)
+          if (e.key === 'Tab') {
+              e.preventDefault(); 
+              e.stopPropagation();
+
+              if (s.showItemMenu) {
+                  setShowItemMenu(false);
+              } else {
+                  setIsPaused(prev => !prev);
+              }
+              return;
+          }
+
+          if (s.isPaused) return; // Block other inputs if paused
+          
+          if (e.key === 'F9') setDevMode(prev => !prev);
+          
+          if ((e.code === 'Space' || e.key === ' ') && !s.dialogue) {
+              if (s.inventory.has('Obscure Lens')) {
+                  setWorldType(prev => prev === WorldType.REALITY ? WorldType.INNER_WORLD : WorldType.REALITY);
+              } else {
+                  setDialogue({ title: "System Restriction", text: "You sense a hidden layer to reality, but your naked eyes cannot perceive the 'Inner World'. You need a catalyst." });
+              }
+          }
+          
+          if ((e.key === 'z' || e.key === 'Enter')) {
+               // CALL LATEST HANDLERS FROM REF
+               if (s.dialogue) {
+                   handlersRef.current.handleDialogueAdvance();
+               } else if (s.interactionTarget) {
+                   handlersRef.current.handleInteraction(s.interactionTarget);
+               }
+          }
+      };
+
+      const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key] = false; };
+      
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
+
+      return () => {
+          window.removeEventListener('keydown', handleKeyDown);
+          window.removeEventListener('keyup', handleKeyUp);
+      };
+  }, []); // EMPTY DEPENDENCY ARRAY ensures listeners are never re-bound
 
   // --- GAME LOOP ---
   useEffect(() => {
@@ -304,18 +326,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           }
       }
       setInteractionTarget(nearest);
-  };
-
-  const handleInteraction = (entity: MapEntity) => {
-      const helpers = {
-          setFlag: (f: string) => setFlags(prev => new Set(prev).add(f)),
-          removeFlag: (f: string) => setFlags(prev => { const next = new Set(prev); next.delete(f); return next; }),
-          hasFlag: (f: string) => flags.has(f),
-          addItem: (id: string, name: string) => { setInventory(prev => new Set(prev).add(name)); setDialogue({ title: "Item Get!", text: `You obtained: ${name}` }); },
-          hasItem: (id: string) => inventory.has(id),
-          worldType
-      };
-      if (entity.onInteract) entity.onInteract(helpers);
   };
 
   const getCameraOffset = () => {
@@ -435,7 +445,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         </div>
         {interactionTarget && !dialogue && !isPaused && (
             <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 animate-bounce pointer-events-none">
-                <div className="bg-white text-black px-6 py-2 font-bold rounded-full shadow-[0_0_20px_white] flex items-center gap-2"><span>⚡</span> Z / ENTER</div>
+                <div className="bg-white text-black px-6 py-2 font-bold rounded-full shadow-[0_0_20px_white] flex items-center gap-2 cursor-pointer"><span>⚡</span> Z / ENTER</div>
             </div>
         )}
         {dialogue && (
