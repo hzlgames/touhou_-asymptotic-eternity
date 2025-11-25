@@ -25,23 +25,18 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   const [flags, setFlags] = useState<Set<string>>(initialState ? new Set(initialState.flags) : new Set());
   const [inventory, setInventory] = useState<Set<string>>(initialState ? new Set(initialState.inventory) : new Set());
   
-  // Position State
+  // Position State (Logical Grid Position)
   const [playerGridPos, setPlayerGridPos] = useState(initialState?.playerGridPos || { x: 0, y: 0 });
   const [mapData, setMapData] = useState<MapData | null>(null);
   
-  // Visual Interpolation State
-  // We track the visual position explicitly for the camera to follow
+  // Visual Interpolation State (For Rendering Only)
   const [visualPos, setVisualPos] = useState({ x: 0, y: 0 });
-
-  // Movement Logic State
-  const [isMoving, setIsMoving] = useState(false);
-  const [targetGridPos, setTargetGridPos] = useState<{x:number, y:number} | null>(null);
-  const [moveProgress, setMoveProgress] = useState(0); // 0.0 to 1.0
 
   // Animation State
   const [direction, setDirection] = useState(1); // 1 = Right, -1 = Left (Flipped)
   const [moveDir, setMoveDir] = useState<'UP'|'DOWN'|'SIDE'>('DOWN'); 
   const [animFrame, setAnimFrame] = useState(0); // 0 = Idle, 1/2 = Walk
+  const [isMoving, setIsMoving] = useState(false);
 
   // UI State
   const [interactionTarget, setInteractionTarget] = useState<MapEntity | null>(null);
@@ -54,12 +49,44 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   const [encounterTriggered, setEncounterTriggered] = useState(false);
 
   // --- REFS ---
-  // Refs are used to access latest state inside the RequestAnimationFrame loop without re-binding
+  
+  // PHYSICS REF: The Single Source of Truth for Movement Logic
+  // We separate physics from React State to prevent render-cycle jitter and race conditions.
+  const physicsRef = useRef({
+      x: playerGridPos.x,
+      y: playerGridPos.y,
+      targetX: null as number | null,
+      targetY: null as number | null,
+      progress: 0
+  });
+
+  // Init Ref on load
+  useEffect(() => {
+      if (initialState) {
+          physicsRef.current.x = initialState.playerGridPos.x;
+          physicsRef.current.y = initialState.playerGridPos.y;
+          setVisualPos({ x: initialState.playerGridPos.x * TILE_SIZE, y: initialState.playerGridPos.y * TILE_SIZE });
+      }
+  }, []);
+
+  // Sync React State Teleports to Physics Ref
+  // Only update if the difference is large (teleport), ignore small 1-tile walking updates to prevent clobbering
+  useEffect(() => {
+      const dx = Math.abs(playerGridPos.x - physicsRef.current.x);
+      const dy = Math.abs(playerGridPos.y - physicsRef.current.y);
+      
+      // If deviation is large, it's a teleport or spawn event
+      if (dx > 1.5 || dy > 1.5) {
+          physicsRef.current.x = playerGridPos.x;
+          physicsRef.current.y = playerGridPos.y;
+          physicsRef.current.targetX = null;
+          physicsRef.current.targetY = null;
+          physicsRef.current.progress = 0;
+          setVisualPos({ x: playerGridPos.x * TILE_SIZE, y: playerGridPos.y * TILE_SIZE });
+      }
+  }, [playerGridPos]);
+
   const stateRef = useRef({
-      playerGridPos,
-      targetGridPos,
-      moveProgress,
-      isMoving,
       mapData,
       worldType,
       dialogue,
@@ -67,17 +94,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       encounterTriggered,
       devMode,
       sanity,
-      flashOpacity,
-      lastFrameTime: 0,
-      animTimer: 0
+      flashOpacity
   });
 
-  // Update refs when state changes
+  // Update logic refs
   useEffect(() => {
-      stateRef.current.playerGridPos = playerGridPos;
-      stateRef.current.targetGridPos = targetGridPos;
-      stateRef.current.moveProgress = moveProgress;
-      stateRef.current.isMoving = isMoving;
       stateRef.current.mapData = mapData;
       stateRef.current.worldType = worldType;
       stateRef.current.dialogue = dialogue;
@@ -86,7 +107,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       stateRef.current.devMode = devMode;
       stateRef.current.sanity = sanity;
       stateRef.current.flashOpacity = flashOpacity;
-  }, [playerGridPos, targetGridPos, moveProgress, isMoving, mapData, worldType, dialogue, isPaused, encounterTriggered, devMode, sanity, flashOpacity]);
+  }, [mapData, worldType, dialogue, isPaused, encounterTriggered, devMode, sanity, flashOpacity]);
 
   const keysRef = useRef<Record<string, boolean>>({});
 
@@ -117,11 +138,13 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   useEffect(() => {
     const data = loadMap();
     setMapData(data);
+    
+    // Initial Spawn
     if (playerGridPos.x === 0 && playerGridPos.y === 0 && !initialState) {
         setPlayerGridPos(data.spawnPoint);
+        physicsRef.current.x = data.spawnPoint.x;
+        physicsRef.current.y = data.spawnPoint.y;
         setVisualPos({ x: data.spawnPoint.x * TILE_SIZE, y: data.spawnPoint.y * TILE_SIZE });
-    } else if (initialState) {
-        setVisualPos({ x: initialState.playerGridPos.x * TILE_SIZE, y: initialState.playerGridPos.y * TILE_SIZE });
     }
   }, [loadMap]);
 
@@ -131,7 +154,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       const handleKeyDown = (e: KeyboardEvent) => {
           keysRef.current[e.key] = true;
 
-          // Global Toggles
           if (e.key === 'Tab') {
               e.preventDefault(); e.stopPropagation();
               if (showItemMenu) setShowItemMenu(false);
@@ -150,9 +172,10 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
               }
           }
           
+          // Interaction check: use Physics Ref for accurate position
           if ((e.key === 'z' || e.key === 'Enter')) {
                if (dialogue) handlersRef.current.handleDialogueAdvance();
-               else if (interactionTarget && !targetGridPos) handlersRef.current.handleInteraction(interactionTarget);
+               else if (interactionTarget && physicsRef.current.targetX === null) handlersRef.current.handleInteraction(interactionTarget);
           }
       };
 
@@ -163,9 +186,9 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           window.removeEventListener('keydown', handleKeyDown);
           window.removeEventListener('keyup', handleKeyUp);
       };
-  }, [isPaused, showItemMenu, dialogue, inventory, interactionTarget, targetGridPos]);
+  }, [isPaused, showItemMenu, dialogue, inventory, interactionTarget]);
 
-  // Stable Handlers for Input
+  // Stable Handlers
   const handleDialogueAdvance = () => {
     if (!dialogue) return;
     let isBossTrigger = false;
@@ -201,7 +224,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
   const createSnapshot = (): SaveData => ({
       characterId: character.id,
-      playerGridPos,
+      playerGridPos: { x: physicsRef.current.x, y: physicsRef.current.y },
       worldType,
       sanity,
       inventory: Array.from(inventory),
@@ -229,10 +252,16 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       if (trigger) {
           if (trigger.condition && !trigger.condition(flags)) return;
           if (trigger.type === 'TELEPORT' && trigger.targetX !== undefined) {
-              setPlayerGridPos({ x: trigger.targetX!, y: trigger.targetY || y });
-              setTargetGridPos(null);
-              setMoveProgress(0);
+              setPlayerGridPos({ x: trigger.targetX!, y: trigger.targetY || y }); // Updates state (and eventually physics via effect)
+              
+              // Force update physics immediately to prevent lag
+              physicsRef.current.x = trigger.targetX!;
+              physicsRef.current.y = trigger.targetY || y;
+              physicsRef.current.targetX = null;
+              physicsRef.current.targetY = null;
+              physicsRef.current.progress = 0;
               setVisualPos({ x: trigger.targetX! * TILE_SIZE, y: (trigger.targetY || y) * TILE_SIZE });
+              
               if (trigger.flashEffect) setFlashOpacity(1);
               if (trigger.message) {
                   setLoopMessage(trigger.message);
@@ -268,10 +297,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
     let lastTime = performance.now();
 
     const loop = (time: number) => {
-        const dt = time - lastTime; // Delta time in ms
+        const dt = time - lastTime;
         lastTime = time;
 
         const s = stateRef.current;
+        const phys = physicsRef.current;
         
         // 1. Skip logic if paused/dialogue
         if (!s.mapData || s.dialogue || s.encounterTriggered || s.isPaused) {
@@ -279,11 +309,10 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             return;
         }
 
-        // 2. Logic Updates (Sanity, Flash)
+        // 2. Logic Updates
         if (s.flashOpacity > 0) setFlashOpacity(prev => Math.max(0, prev - 0.05));
         
         if (s.worldType === WorldType.INNER_WORLD && !s.devMode) {
-             // Slower drain for gameplay balance
              if (Math.random() > 0.9) setSanity(prev => Math.max(0, prev - 0.1));
              if (s.sanity <= 0) {
                  setWorldType(WorldType.REALITY);
@@ -293,95 +322,91 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
              setSanity(prev => Math.min(100, prev + 0.1));
         }
 
-        // 3. Movement Logic
-        let currentVisualX = 0;
-        let currentVisualY = 0;
-
-        if (s.targetGridPos) {
-            // MOVING
-            setIsMoving(true);
-            
-            // Calculate distance to move this frame
+        // 3. Movement Logic (Physics Based)
+        let isMovingLocal = false;
+        
+        if (phys.targetX !== null && phys.targetY !== null) {
+            // CURRENTLY MOVING
+            isMovingLocal = true;
             const speed = s.devMode ? TILES_PER_SECOND * 3 : TILES_PER_SECOND;
-            const step = (speed * dt) / 1000; // progress amount (0.0 to 1.0 based)
+            const step = (speed * dt) / 1000;
             
-            const newProgress = s.moveProgress + step;
+            phys.progress += step;
 
-            if (newProgress >= 1.0) {
+            if (phys.progress >= 1.0) {
                 // ARRIVED
-                const finalPos = s.targetGridPos;
-                setPlayerGridPos(finalPos);
-                checkTriggers(finalPos.x, finalPos.y, s.mapData);
+                phys.x = phys.targetX;
+                phys.y = phys.targetY;
+                
+                // Calculate time overflow for smooth continuous movement
+                const overflow = phys.progress - 1.0;
+                
+                // Sync State for React Listeners
+                setPlayerGridPos({ x: phys.x, y: phys.y });
+                checkTriggers(phys.x, phys.y, s.mapData);
 
-                // Continuous Movement Check
+                // Chain next move if key held
                 const input = getMoveInput();
                 if (input) {
-                    const nextX = finalPos.x + input.dx;
-                    const nextY = finalPos.y + input.dy;
+                    const nextX = phys.x + input.dx;
+                    const nextY = phys.y + input.dy;
                     if (isWalkable(nextX, nextY, s.mapData, s.worldType)) {
-                        setTargetGridPos({ x: nextX, y: nextY });
-                        setMoveProgress(0);
+                        phys.targetX = nextX;
+                        phys.targetY = nextY;
+                        phys.progress = overflow; // Apply overflow to next step!
+                        
                         setMoveDir(input.dir);
                         if (input.facing) setDirection(input.facing);
-                        
-                        // Set visual pos to start of next tile for continuity
-                        currentVisualX = finalPos.x * TILE_SIZE;
-                        currentVisualY = finalPos.y * TILE_SIZE;
                     } else {
-                        // Wall hit
-                        setTargetGridPos(null);
-                        setMoveProgress(0);
-                        setIsMoving(false);
-                        currentVisualX = finalPos.x * TILE_SIZE;
-                        currentVisualY = finalPos.y * TILE_SIZE;
+                        // Wall -> Stop
+                        phys.targetX = null;
+                        phys.targetY = null;
+                        phys.progress = 0;
+                        isMovingLocal = false;
                     }
                 } else {
-                    // Stopped
-                    setTargetGridPos(null);
-                    setMoveProgress(0);
-                    setIsMoving(false);
-                    currentVisualX = finalPos.x * TILE_SIZE;
-                    currentVisualY = finalPos.y * TILE_SIZE;
+                    // No Input -> Stop
+                    phys.targetX = null;
+                    phys.targetY = null;
+                    phys.progress = 0;
+                    isMovingLocal = false;
                 }
-            } else {
-                // STILL MOVING (Interpolate)
-                setMoveProgress(newProgress);
-                
-                // Lerp Math
-                const startX = s.playerGridPos.x * TILE_SIZE;
-                const startY = s.playerGridPos.y * TILE_SIZE;
-                const endX = s.targetGridPos.x * TILE_SIZE;
-                const endY = s.targetGridPos.y * TILE_SIZE;
-                
-                currentVisualX = startX + (endX - startX) * newProgress;
-                currentVisualY = startY + (endY - startY) * newProgress;
             }
         } else {
-            // STATIONARY
+            // IDLE -> CHECK START
             const input = getMoveInput();
             if (input) {
-                const nextX = s.playerGridPos.x + input.dx;
-                const nextY = s.playerGridPos.y + input.dy;
+                const nextX = phys.x + input.dx;
+                const nextY = phys.y + input.dy;
                 if (isWalkable(nextX, nextY, s.mapData, s.worldType)) {
-                    setTargetGridPos({ x: nextX, y: nextY });
-                    setMoveProgress(0);
+                    phys.targetX = nextX;
+                    phys.targetY = nextY;
+                    phys.progress = 0;
                     setMoveDir(input.dir);
                     if (input.facing) setDirection(input.facing);
-                    setIsMoving(true);
+                    isMovingLocal = true;
                 }
-            } else {
-                setIsMoving(false);
             }
-            
-            // Snap to grid if stationary
-            currentVisualX = s.playerGridPos.x * TILE_SIZE;
-            currentVisualY = s.playerGridPos.y * TILE_SIZE;
         }
-        
-        // Update Visual Position State (This drives the camera)
-        setVisualPos({ x: currentVisualX, y: currentVisualY });
 
-        // Update Interaction Target (Nearest Entity)
+        setIsMoving(isMovingLocal);
+
+        // 4. Calculate Visual Position
+        let visX = phys.x * TILE_SIZE;
+        let visY = phys.y * TILE_SIZE;
+
+        if (phys.targetX !== null && phys.targetY !== null) {
+            const startX = phys.x * TILE_SIZE;
+            const startY = phys.y * TILE_SIZE;
+            const endX = phys.targetX * TILE_SIZE;
+            const endY = phys.targetY * TILE_SIZE;
+            visX = startX + (endX - startX) * phys.progress;
+            visY = startY + (endY - startY) * phys.progress;
+        }
+
+        setVisualPos({ x: visX, y: visY });
+
+        // Update Interaction Target
         let nearest: MapEntity | null = null;
         let minDst = 1.5; 
         for (const ent of s.mapData.entities) {
@@ -389,8 +414,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             if (ent.hideFlag && flags.has(ent.hideFlag)) continue;
             if (ent.reqFlag && !flags.has(ent.reqFlag)) continue;
             
-            // Calc distance in Grid Units
-            const dist = Math.sqrt(Math.pow((currentVisualX/TILE_SIZE) - ent.x, 2) + Math.pow((currentVisualY/TILE_SIZE) - ent.y, 2));
+            const dist = Math.sqrt(Math.pow((visX/TILE_SIZE) - ent.x, 2) + Math.pow((visY/TILE_SIZE) - ent.y, 2));
             if (dist < minDst) {
                 minDst = dist;
                 nearest = ent;
@@ -403,31 +427,22 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
     animationFrameId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [getMoveInput]);
+  }, [getMoveInput]); // physicsRef and stateRef are stable
 
   // --- ANIMATION FRAME LOGIC ---
   useEffect(() => {
-      // Logic: 
-      // Idle = Frame 0.
-      // Moving = Toggle Frame 1 and 2 every 300ms.
-      
       if (!isMoving) {
           setAnimFrame(0);
           return;
       }
-
-      // Initialize to frame 1 when starting movement
       setAnimFrame(prev => prev === 0 ? 1 : prev);
-
       const interval = setInterval(() => {
           setAnimFrame(prev => (prev === 1 ? 2 : 1));
       }, 300);
-
       return () => clearInterval(interval);
   }, [isMoving]);
 
   // --- CAMERA LOGIC ---
-  // Calculates the transform required to center the camera on visualPos
   const getCameraTransform = () => {
       if (!mapData) return { x: 0, y: 0 };
 
@@ -435,37 +450,26 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       const screenW = window.innerWidth;
       const screenH = window.innerHeight;
 
-      // Map Dimensions in Pixels
-      const mapW = mapData.width * TILE_SIZE;
-      const mapH = mapData.height * TILE_SIZE;
-
-      // Center Point Target (The Player's Center)
+      // Center Point Target (Character Visual Center)
       const targetX = visualPos.x + (TILE_SIZE / 2);
       const targetY = visualPos.y + (TILE_SIZE / 2);
 
-      // Desired Camera Top-Left (Camera is essentially a window into the map)
-      // CameraX = CenterScreen - PlayerX
+      // Camera Position (Top-Left of viewport)
+      // We want Target to be at ScreenCenter
       let camX = (screenW / 2) - targetX;
       let camY = (screenH / 2) - targetY;
 
-      // Clamping: Ensure we don't show black void outside map
-      // Max X is 0 (Left edge aligned)
-      // Min X is ScreenW - MapW (Right edge aligned)
+      // Optional: Clamp to map bounds (remove if you want pure centering regardless of void)
+      const mapW = mapData.width * TILE_SIZE;
+      const mapH = mapData.height * TILE_SIZE;
       const minX = screenW - mapW;
       const minY = screenH - mapH;
+      
+      if (mapW < screenW) camX = (screenW - mapW) / 2;
+      else camX = Math.max(minX, Math.min(0, camX));
 
-      // If map is smaller than screen, center it. Otherwise clamp.
-      if (mapW < screenW) {
-          camX = (screenW - mapW) / 2;
-      } else {
-          camX = Math.max(minX, Math.min(0, camX));
-      }
-
-      if (mapH < screenH) {
-          camY = (screenH - mapH) / 2;
-      } else {
-          camY = Math.max(minY, Math.min(0, camY));
-      }
+      if (mapH < screenH) camY = (screenH - mapH) / 2;
+      else camY = Math.max(minY, Math.min(0, camY));
 
       return { x: camX, y: camY };
   };
@@ -478,9 +482,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       const isGrid = character.spriteSheetType === 'GRID_3x3';
       
       if (isGrid) {
-          // Row 0: Front (Down)
-          // Row 1: Side (Right) -> Flip for Left
-          // Row 2: Back (Up)
+          // Row 0: Front (Down), Row 1: Side, Row 2: Back (Up)
           let row = 0;
           let flip = false;
           
@@ -491,10 +493,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
               if (direction === -1) flip = true;
           }
 
-          // Column Logic (Horizontal Position)
-          // Index 0: Idle (0%)
-          // Index 1: Walk A (50%)
-          // Index 2: Walk B (100%)
+          // Cols: 0=Idle, 1=Walk1, 2=Walk2
           const xPos = animFrame * 50; 
           const yPos = row * 50;
 
@@ -524,12 +523,12 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black font-serif outline-none" tabIndex={0}>
-        {/* GAME WORLD CONTAINER - Hardware Accelerated */}
+        {/* GAME WORLD CONTAINER */}
         <div 
             className="will-change-transform" 
             style={{ 
                 transform: `translate3d(${camera.x}px, ${camera.y}px, 0)`,
-                transition: 'none' // CRITICAL: Disable CSS transition for JS-driven movement
+                transition: 'none' // CRITICAL: Disable CSS transition
             }}
         >
             {character.id === CharacterId.KAGUYA ? (
@@ -538,7 +537,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                  <Stage1Bamboo mapData={mapData} worldType={worldType} propSprites={propSprites} />
             )}
             
-            {/* Player Render - Positioned absolutely based on visualPos */}
+            {/* Player Render - Positioned absolutely based on INTERPOLATED visualPos */}
             <div 
                 className="absolute z-30" 
                 style={{ 
@@ -546,14 +545,29 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                     top: 0, 
                     width: TILE_SIZE, 
                     height: TILE_SIZE,
-                    transform: `translate3d(${visualPos.x}px, ${visualPos.y}px, 0)`
+                    transform: `translate3d(${visualPos.x}px, ${visualPos.y}px, 0)`,
+                    transition: 'none'
                 }}
             >
                 {renderPlayerSprite()}
             </div>
+            
+            {/* Interaction Prompt (Follows Player) */}
+            {interactionTarget && !dialogue && !isPaused && physicsRef.current.targetX === null && (
+                <div 
+                    className="absolute z-50 animate-bounce pointer-events-none"
+                    style={{
+                        transform: `translate3d(${visualPos.x}px, ${visualPos.y - 40}px, 0)`
+                    }}
+                >
+                    <div className="bg-white text-black px-3 py-1 font-bold rounded shadow-[0_0_10px_white] text-xs whitespace-nowrap">
+                        !
+                    </div>
+                </div>
+            )}
         </div>
         
-        {/* --- HUD & UI LAYERS (Static Position) --- */}
+        {/* --- HUD & UI LAYERS (Static) --- */}
         
         {/* STATUS BAR */}
         <div className="absolute top-4 left-4 z-50 flex flex-col gap-2 pointer-events-none">
@@ -609,7 +623,8 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         {devMode && (
             <div className="absolute top-20 left-4 z-50 animate-pulse pointer-events-none">
                  <div className="bg-red-600/90 text-white font-mono text-xs border border-white px-2 py-1 shadow-[0_0_10px_red]">
-                    [DEV MODE ACTIVE] <br/> SPEED: 300% <br/> CLIP: OFF
+                    [DEV MODE ACTIVE] <br/> SPEED: 300% <br/> CLIP: OFF <br/> 
+                    X:{physicsRef.current.x.toFixed(2)} Y:{physicsRef.current.y.toFixed(2)}
                  </div>
             </div>
         )}
@@ -625,23 +640,8 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             <div className="bg-black/80 border border-[#FFD700] p-3 rounded text-white min-w-[200px]">
                 <h3 className="text-[#FFD700] text-xs font-bold uppercase tracking-widest mb-1 border-b border-gray-700 pb-1">Current Protocol</h3>
                 <p className="text-sm font-mono text-green-400">{mapData.objectiveText}</p>
-                {inventory.size > 0 && (
-                     <div className="mt-2 pt-2 border-t border-gray-700">
-                         <div className="text-xs text-gray-500">CACHE:</div>
-                         <div className="flex gap-1 flex-wrap mt-1">
-                             {Array.from(inventory).map((item, i) => <span key={i} className="text-xs bg-blue-900/50 px-1 border border-blue-500 rounded font-mono">{item}</span>)}
-                         </div>
-                     </div>
-                )}
             </div>
         </div>
-
-        {/* INTERACTION PROMPT */}
-        {interactionTarget && !dialogue && !isPaused && !targetGridPos && (
-            <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 animate-bounce pointer-events-none">
-                <div className="bg-white text-black px-6 py-2 font-bold rounded-full shadow-[0_0_20px_white] flex items-center gap-2 cursor-pointer"><span>⚡</span> Z / ENTER</div>
-            </div>
-        )}
 
         {/* DIALOGUE BOX */}
         {dialogue && (
@@ -662,9 +662,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         {/* FX OVERLAYS */}
         <div className="absolute inset-0 bg-white pointer-events-none z-[100] transition-opacity duration-300" style={{ opacity: flashOpacity }} />
         <div className={`absolute inset-0 pointer-events-none transition-all duration-700 z-40 ${worldType === 'INNER_WORLD' ? 'shadow-[inset_0_0_100px_rgba(255,0,0,0.5)] backdrop-contrast-125 backdrop-hue-rotate-15' : 'shadow-[inset_0_0_150px_rgba(0,0,0,0.8)] backdrop-grayscale-[0.3]'}`} />
-        {worldType === 'INNER_WORLD' && (
-             <div className="absolute inset-0 z-30 pointer-events-none opacity-10 mix-blend-overlay" style={{backgroundImage: 'url(https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif)', backgroundSize: 'cover'}}></div>
-        )}
     </div>
   );
 };
