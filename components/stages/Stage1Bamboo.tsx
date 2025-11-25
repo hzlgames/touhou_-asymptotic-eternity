@@ -46,8 +46,8 @@ export const getStage1BambooData = (
 
             // 3. Blue Fire Barrier (The River equivalent)
             if (y === 10 && x > 10 && x < 30) {
-                 tile = TileType.WATER; // Visualized as fire
-                 if (fireCleared) tile = TileType.FLOOR;
+                 if (!fireCleared) tile = TileType.WATER; // Visualized as fire
+                 else tile = TileType.FLOOR;
             }
 
             row.push(tile);
@@ -122,7 +122,7 @@ export const getStage1BambooData = (
     for (let i = 0; i < 30; i++) {
         const bx = Math.floor(Math.random() * MAP_WIDTH);
         const by = Math.floor(Math.random() * MAP_HEIGHT);
-        if (tiles[by][bx] === TileType.WALL) {
+        if (tiles[by] && tiles[by][bx] === TileType.WALL) {
              entities.push({
                  id: `bamboo_${i}`, x: bx, y: by,
                  name: 'Bamboo', color: 'green', interactionType: 'READ', isSolid: true, visibleIn: 'BOTH',
@@ -155,6 +155,7 @@ const Stage1Bamboo: React.FC<StageProps> = ({ mapData, worldType, propSprites })
             return (
                 <div key={`${x}-${y}`} style={style} className="bg-blue-900 animate-pulse flex items-center justify-center overflow-hidden">
                      <div className="w-full h-full bg-blue-500 opacity-50 blur-sm animate-[ping_1s_infinite]"></div>
+                     <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
                 </div>
             );
         }
@@ -190,7 +191,7 @@ const Stage1Bamboo: React.FC<StageProps> = ({ mapData, worldType, propSprites })
              const sprite = propSprites['PROP_BAMBOO_TREE'];
              return (
                  <div key={entity.id} style={style} className="pointer-events-none -top-16 -left-4 w-[96px] h-[128px]">
-                     {sprite ? <img src={sprite} className="w-full h-full object-contain brightness-50 sepia" /> : <div className="w-full h-full bg-green-900"></div>}
+                     {sprite ? <img src={sprite} className="w-full h-full object-contain brightness-50 sepia" alt="Bamboo" /> : <div className="w-full h-full bg-green-900/50"></div>}
                  </div>
              );
         }
@@ -200,9 +201,9 @@ const Stage1Bamboo: React.FC<StageProps> = ({ mapData, worldType, propSprites })
             return (
                  <div key={entity.id} style={style} className="pointer-events-none flex justify-center -top-8">
                      {sprite ? (
-                         <img src={sprite} className={`w-[96px] h-[96px] object-contain ${!isReality ? 'invert filter drop-shadow-[0_0_10px_white]' : ''}`} />
+                         <img src={sprite} className={`w-[96px] h-[96px] object-contain ${!isReality ? 'invert filter drop-shadow-[0_0_10px_white]' : ''}`} alt="Marisa" />
                      ) : (
-                         <div className="w-16 h-16 bg-yellow-600 rounded-full animate-bounce"></div>
+                         <div className="w-16 h-16 bg-yellow-600 rounded-full animate-bounce border-2 border-white"></div>
                      )}
                      <div className="absolute -top-12 bg-black/80 text-white text-[10px] px-2 rounded animate-bounce whitespace-nowrap">
                          Zzz... I want to go home...
@@ -214,10 +215,20 @@ const Stage1Bamboo: React.FC<StageProps> = ({ mapData, worldType, propSprites })
         if (entity.name === 'Sealed Talisman') {
             return (
                 <div key={entity.id} style={style} className="pointer-events-none flex justify-center items-center animate-bounce">
-                    <div className="w-8 h-10 bg-yellow-200 border-2 border-red-500 text-red-500 font-bold text-[8px] flex items-center justify-center">
+                    <div className="w-8 h-10 bg-yellow-200 border-2 border-red-500 text-red-500 font-bold text-[8px] flex items-center justify-center shadow-[0_0_15px_yellow]">
                         SEAL
                     </div>
                 </div>
+            );
+        }
+        
+        if (entity.id === 'item_lens_bamboo') {
+            return (
+              <div key={entity.id} style={style} className="absolute z-20 flex items-center justify-center pointer-events-none animate-pulse">
+                   <div className="w-8 h-8 bg-black border-2 border-purple-500 rounded-full flex items-center justify-center shadow-[0_0_15px_purple]">
+                       <span className="text-lg">👁️</span>
+                   </div>
+              </div>
             );
         }
 

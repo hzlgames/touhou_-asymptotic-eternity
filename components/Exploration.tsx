@@ -90,13 +90,28 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         
         // Close Dialogue
         if ((e.key === 'z' || e.key === 'Enter') && dialogue) {
+            let handled = false;
+            
+            // Softlock Protection: Ensure we close the dialogue even if the enemy lookup fails
             if (dialogue.title.includes("Reimu")) {
                 const reimu = scenarioEnemies.find(e => e.name.includes('Reimu'));
-                if (reimu) onEncounter(reimu);
+                if (reimu) {
+                    onEncounter(reimu);
+                    handled = true;
+                } else {
+                    console.warn("Enemy Reimu not found in scenario data!");
+                }
             } else if (dialogue.title.includes("Marisa")) {
                 const marisa = scenarioEnemies.find(e => e.name.includes('Marisa'));
-                if (marisa) onEncounter(marisa);
-            } else {
+                if (marisa) {
+                    onEncounter(marisa);
+                    handled = true;
+                } else {
+                    console.warn("Enemy Marisa not found in scenario data!");
+                }
+            } 
+            
+            if (!handled) {
                 setDialogue(null);
             }
         }
@@ -183,8 +198,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           TileType.PILLAR, 
           TileType.BOOKSHELF, 
           TileType.FURNACE,
-          TileType.WATER // Water is solid unless bridge
+          // Water is conditionally solid based on logic (handled in stage gen) but generally blocked
       ];
+
+      // Special Case: Water is only walkable if it's a bridge or cleared fire
+      if (tile === TileType.WATER) return false;
 
       // Special Case: Secret Door is walkable
       if (tile === TileType.SECRET_DOOR) return true;
@@ -323,6 +341,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                         src={isMoving ? character.pixelSpriteUrlWalk : character.pixelSpriteUrl} 
                         className="w-full h-full object-contain drop-shadow-lg"
                         style={{ transform: `scaleX(${direction})` }}
+                        alt="Player"
                     />
                 ) : (
                     <div className="w-full h-full flex flex-col items-center justify-end">
@@ -396,7 +415,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             <div className="absolute inset-x-0 bottom-0 min-h-[250px] bg-gradient-to-t from-black via-black/95 to-transparent z-[60] flex flex-col items-center justify-end pb-10">
                 <div className="w-full max-w-4xl bg-[#1a0505] border-t-2 border-[#FFD700] p-6 shadow-2xl animate-slide-up flex gap-6">
                     <div className="w-32 h-32 bg-black border border-white shrink-0 overflow-hidden relative">
-                         <img src={character.portraitUrl} className="w-full h-full object-cover" />
+                         <img src={character.portraitUrl} className="w-full h-full object-cover" alt="Portrait" />
                     </div>
                     <div className="flex-1 flex flex-col">
                         <h3 className="text-[#FFD700] text-lg mb-2 font-bold tracking-wider font-mono">{dialogue.title}</h3>
