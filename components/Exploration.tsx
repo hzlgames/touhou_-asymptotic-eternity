@@ -1,7 +1,8 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Character, Enemy, MapData, MapEntity, TileType, WorldType } from '../types';
+import { Character, CharacterId, Enemy, MapData, MapEntity, TileType, WorldType } from '../types';
 import Stage1Eientei, { getStage1Data, TILE_SIZE } from './stages/Stage1Eientei';
+import Stage1Bamboo, { getStage1BambooData } from './stages/Stage1Bamboo';
 
 interface ExplorationProps {
   character: Character;
@@ -38,20 +39,26 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
      });
   }, []);
 
+  const handleMarisaEncounter = useCallback(() => {
+    setDialogue({
+        title: "Depressed Marisa",
+        text: "Oh... it's you, Mokou. Are you here to burn the forest too? Go ahead. Nothing matters anymore. Magic is just... false data."
+    });
+ }, []);
+
   const loadMap = useCallback(() => {
-      const data = getStage1Data(
-        flags, 
-        inventory,
-        handleReimuEncounter,
-        worldType 
-    );
-    setMapData(data);
-    return data;
-  }, [flags, inventory, handleReimuEncounter, worldType]);
+      if (character.id === CharacterId.KAGUYA) {
+        return getStage1Data(flags, inventory, handleReimuEncounter, worldType);
+      } else {
+        return getStage1BambooData(flags, inventory, handleMarisaEncounter, worldType);
+      }
+  }, [flags, inventory, handleReimuEncounter, handleMarisaEncounter, worldType, character.id]);
 
   // Initial Load
   useEffect(() => {
     const data = loadMap();
+    setMapData(data);
+    // Only set spawn if not set (or if map changed drastically, simplified here)
     if (playerGridPos.x === 0 && playerGridPos.y === 0) {
         setPlayerGridPos(data.spawnPoint);
     }
@@ -86,6 +93,9 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             if (dialogue.title.includes("Reimu")) {
                 const reimu = scenarioEnemies.find(e => e.name.includes('Reimu'));
                 if (reimu) onEncounter(reimu);
+            } else if (dialogue.title.includes("Marisa")) {
+                const marisa = scenarioEnemies.find(e => e.name.includes('Marisa'));
+                if (marisa) onEncounter(marisa);
             } else {
                 setDialogue(null);
             }
@@ -291,7 +301,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             className="will-change-transform transition-transform duration-300 ease-out"
             style={{ transform: `translate3d(${camera.x}px, ${camera.y}px, 0)` }}
         >
-            <Stage1Eientei mapData={mapData} worldType={worldType} propSprites={propSprites} />
+            {character.id === CharacterId.KAGUYA ? (
+                 <Stage1Eientei mapData={mapData} worldType={worldType} propSprites={propSprites} />
+            ) : (
+                 <Stage1Bamboo mapData={mapData} worldType={worldType} propSprites={propSprites} />
+            )}
 
             {/* Player */}
             <div 
@@ -321,7 +335,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         {/* UI HUD */}
         <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
             <h1 className="text-xl text-white bg-black/60 px-4 py-2 border-l-4 border-blue-500 font-mono">
-                SECTOR 1: PROCESSING LANE
+                {character.id === CharacterId.KAGUYA ? "SECTOR 1: PROCESSING LANE" : "SECTOR 1: DECAYING FOREST"}
             </h1>
             
             <div className="flex items-center gap-2 bg-black/60 px-4 py-2 rounded-r-lg">

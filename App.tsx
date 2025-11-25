@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Exploration from './components/Exploration';
 import DanmakuBattle from './components/DanmakuBattle';
@@ -165,6 +166,28 @@ const App: React.FC = () => {
             'Character on transparent background. Pixel art Reimu Hakurei sitting at a desk, typing furiously on a mechanical keyboard. She looks exhausted, bags under eyes. Anime RPG style top-down. Transparent background.'
         );
         if (reimuWork) updateAssetRecord('PROP_REIMU_WORK', 'sprite', reimuWork);
+    } else if (charId === CharacterId.MOKOU) {
+         setLoadingStatus("Generating Bamboo Nightmare...");
+
+         // 1. Burnt Bamboo
+         const bamboo = await fetchAsset(
+            'PROP_BAMBOO_TREE',
+            'Burnt Bamboo',
+            'A burnt bamboo stalk.',
+            'sprite',
+            'Object on transparent background. Pixel art single bamboo stalk, charred black and glowing with embers. Cyberpunk glitch effects. Transparent background.'
+         );
+         if (bamboo) updateAssetRecord('PROP_BAMBOO_TREE', 'sprite', bamboo);
+
+         // 2. Depressed Marisa
+         const marisa = await fetchAsset(
+             'PROP_MARISA_SAD',
+             'Depressed Marisa',
+             'Marisa sitting on the ground.',
+             'sprite',
+             'Character on transparent background. Pixel art Marisa Kirisame sitting on the ground hugging her knees. She looks sad and tired. Her witch hat is on the ground next to her. Anime RPG style. Transparent background.'
+         );
+         if (marisa) updateAssetRecord('PROP_MARISA_SAD', 'sprite', marisa);
     }
 
     setLoadingStatus(null);
@@ -205,6 +228,11 @@ const App: React.FC = () => {
             loadedAssets.props['PROP_SHRINE_OFFICE'] &&
             loadedAssets.props['PROP_SHREDDER'] && 
             loadedAssets.props['PROP_REIMU_WORK']
+        );
+    } else if (id === CharacterId.MOKOU) {
+        propsLoaded = !!(
+            loadedAssets.props['PROP_BAMBOO_TREE'] &&
+            loadedAssets.props['PROP_MARISA_SAD']
         );
     }
 
@@ -313,6 +341,11 @@ const App: React.FC = () => {
                             loadedAssets.props['PROP_SHRINE_OFFICE'] &&
                             loadedAssets.props['PROP_SHREDDER'] &&
                             loadedAssets.props['PROP_REIMU_WORK']
+                        );
+                    } else if (char.id === CharacterId.MOKOU) {
+                         propsReady = !!(
+                            loadedAssets.props['PROP_BAMBOO_TREE'] &&
+                            loadedAssets.props['PROP_MARISA_SAD']
                         );
                     }
                     const isReady = basicReady && propsReady;
