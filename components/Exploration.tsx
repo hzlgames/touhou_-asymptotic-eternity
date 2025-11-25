@@ -1,4 +1,6 @@
 
+
+
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Character, CharacterId, Enemy, MapData, MapEntity, TileType, WorldType, SaveData } from '../types';
 import Stage1Eientei, { getStage1Data, TILE_SIZE } from './stages/Stage1Eientei';
@@ -33,9 +35,9 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   const [visualPos, setVisualPos] = useState({ x: 0, y: 0 });
 
   // Animation State
-  const [direction, setDirection] = useState(1); // 1 = Right, -1 = Left (Flipped)
+  const [direction, setDirection] = useState(1); // 1 = Right, -1 = Left (Mainly used for projectile origin offset now)
   const [moveDir, setMoveDir] = useState<'UP'|'DOWN'|'SIDE'>('DOWN'); 
-  const [animFrame, setAnimFrame] = useState(0); // 0 = Idle, 1/2 = Walk
+  const [animFrame, setAnimFrame] = useState(0); // 0 = Idle, 1,2,3 = Walk
   const [isMoving, setIsMoving] = useState(false);
 
   // UI State
@@ -435,10 +437,17 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           setAnimFrame(0);
           return;
       }
-      setAnimFrame(prev => prev === 0 ? 1 : prev);
+      // If just started moving, jump to frame 1 immediately
+      if (animFrame === 0) setAnimFrame(1);
+
+      // Cycle frames 1 -> 2 -> 3 -> 1
       const interval = setInterval(() => {
-          setAnimFrame(prev => (prev === 1 ? 2 : 1));
-      }, 300);
+          setAnimFrame(prev => {
+              if (prev === 0) return 1;
+              const next = prev + 1;
+              return next > 3 ? 1 : next;
+          });
+      }, 150); // Faster animation interval
       return () => clearInterval(interval);
   }, [isMoving]);
 
@@ -479,9 +488,38 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   if (!mapData) return <div>Loading...</div>;
 
   const renderPlayerSprite = () => {
-      const isGrid = character.spriteSheetType === 'GRID_3x3';
+      const isGrid4x4 = character.spriteSheetType === 'GRID_4x4';
+      const isGrid3x3 = character.spriteSheetType === 'GRID_3x3';
       
-      if (isGrid) {
+      if (isGrid4x4) {
+          // 4x4 GRID LOGIC
+          // ROWS: 0=Down, 1=Left, 2=Right, 3=Up
+          // COLS: 0=Idle, 1=Walk1, 2=Walk2, 3=Walk3
+          let row = 0;
+          
+          if (moveDir === 'UP') row = 3;
+          else if (moveDir === 'DOWN') row = 0;
+          else if (moveDir === 'SIDE') {
+              row = direction === -1 ? 1 : 2; // 1=Left, 2=Right
+          }
+
+          // Calculate Percentage Positions (0%, 33.3%, 66.6%, 100%)
+          const xPos = animFrame * 33.33; 
+          const yPos = row * 33.33;
+
+          return (
+              <div 
+                  className={`w-full h-full drop-shadow-lg ${devMode ? 'opacity-50' : ''}`}
+                  style={{
+                      backgroundImage: `url(${character.pixelSpriteUrl})`,
+                      backgroundSize: '400% 400%', 
+                      backgroundPosition: `${xPos}% ${yPos}%`,
+                      imageRendering: 'pixelated'
+                  }}
+              />
+          );
+      } else if (isGrid3x3) {
+          // 3x3 GRID LOGIC (Legacy)
           // Row 0: Front (Down), Row 1: Side, Row 2: Back (Up)
           let row = 0;
           let flip = false;
@@ -493,8 +531,9 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
               if (direction === -1) flip = true;
           }
 
-          // Cols: 0=Idle, 1=Walk1, 2=Walk2
-          const xPos = animFrame * 50; 
+          // Cols: 0=Idle, 1=Walk1, 2=Walk2 (Looping 1-2 in logic, but clamped here)
+          const safeFrame = animFrame > 2 ? 1 : animFrame;
+          const xPos = safeFrame * 50; 
           const yPos = row * 50;
 
           return (

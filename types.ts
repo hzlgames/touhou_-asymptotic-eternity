@@ -25,7 +25,7 @@ export interface Character {
   pixelSpriteUrl: string; 
   pixelSpriteUrlWalk: string; 
   portraitUrl: string; 
-  spriteSheetType?: 'SINGLE' | 'GRID_3x3'; // New: Supports 3x3 grid (3 rows: Front, Side, Back)
+  spriteSheetType?: 'SINGLE' | 'GRID_3x3' | 'GRID_4x4'; // Updated for 4x4
 }
 
 export interface Enemy {

@@ -1,5 +1,6 @@
 
 
+
 import { AssetType, AssetResult } from "./assetStorage";
 import { removeBackground } from "../utils/imageProcessing";
 
@@ -19,7 +20,7 @@ export const getOrGenerateAsset = async (
   try {
     // Custom API Configuration
     const API_URL = "https://new.12ai.org";
-    const MODEL = "gemini-3-pro-image-preview";
+    const MODEL = "gemini-2.5-flash-image";
     const API_KEY = process.env.API_KEY;
 
     if (!API_KEY) {
@@ -35,13 +36,32 @@ export const getOrGenerateAsset = async (
 
     if (type === 'sprite') {
         // DETECT GRID REQUEST
-        if (visualPrompt?.includes('GRID_3x3')) {
+        if (visualPrompt?.includes('GRID_4x4')) {
+            prompt = `A pixel art sprite sheet of ${name}. 
+            LAYOUT: 4x4 Grid.
+            ROWS (Top to Bottom):
+            1. Front View (Walking Down towards camera)
+            2. Left Side View (Walking Left)
+            3. Right Side View (Walking Right)
+            4. Back View (Walking Up away from camera)
+            
+            COLUMNS (Left to Right):
+            1. Idle/Standing Frame
+            2. Walking Frame 1
+            3. Walking Frame 2
+            4. Walking Frame 3
+
+            STYLE: Retro 32-bit RPG style. Chibi anime.
+            BACKGROUND: Solid Green (#00FF00).
+            ${baseDesc}`;
+            aspectRatio = "1:1";
+        } else if (visualPrompt?.includes('GRID_3x3')) {
+            // Fallback for old 3x3 requests
             prompt = `A pixel art sprite sheet of ${name}. 
             LAYOUT: 3x3 Grid.
-            CONTENT: 
-            - Top Row: Walking Forward (Front View) - 3 Frames.
-            - Middle Row: Walking Side (Side View) - 3 Frames.
-            - Bottom Row: Walking Away (Back View) - 3 Frames.
+            - Top Row: Walking Forward (Front View)
+            - Middle Row: Walking Side (Side View)
+            - Bottom Row: Walking Away (Back View)
             STYLE: Retro 32-bit RPG style. Chibi anime.
             BACKGROUND: Solid Green (#00FF00).
             ${baseDesc}`;

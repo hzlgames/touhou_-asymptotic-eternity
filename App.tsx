@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import Exploration from './components/Exploration';
 import DanmakuBattle from './components/DanmakuBattle';
@@ -119,10 +120,10 @@ const App: React.FC = () => {
     const char = CHARACTERS[charId];
     setLoadingStatus(`Awakening ${char.name}...`);
     
-    // Request 3x3 Sprite Sheet for Animation
-    // We use a new ID suffix to distinguish from old single sprites
-    const spriteId = `${char.id}_SHEET_3x3`;
-    const spritePrompt = `${char.visualPrompt} GRID_3x3`; 
+    // Request 4x4 Sprite Sheet for Animation
+    // We use a new ID suffix to distinguish from old 3x3 sheets
+    const spriteId = `${char.id}_SHEET_4x4`;
+    const spritePrompt = `${char.visualPrompt} GRID_4x4`; 
 
     const sprite = await fetchAsset(spriteId, char.name, char.description, 'sprite', spritePrompt);
     if (sprite) updateAssetRecord(spriteId, 'sprite', sprite);
@@ -259,7 +260,7 @@ const App: React.FC = () => {
     setCurrentScenario(scenario);
     
     // Check for Sprite Sheet Existence
-    const sheetId = `${id}_SHEET_3x3`;
+    const sheetId = `${id}_SHEET_4x4`;
     const basicReady = loadedAssets.sprites[sheetId] && loadedAssets.portraits[id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
     let propsReady = true;
     if (id === CharacterId.KAGUYA) {
@@ -331,14 +332,14 @@ const App: React.FC = () => {
   const getCurrentCharacter = (): Character => {
       const base = CHARACTERS[selectedCharId];
       // Lookup the Sheet ID
-      const sheetId = `${selectedCharId}_SHEET_3x3`;
+      const sheetId = `${selectedCharId}_SHEET_4x4`;
       return {
           ...base,
           // Use the Sheet URL if available, otherwise fallback
           pixelSpriteUrl: loadedAssets.sprites[sheetId]?.url || loadedAssets.sprites[selectedCharId]?.url || FALLBACK_SPRITE,
           pixelSpriteUrlWalk: '', // Deprecated in favor of sheet
           portraitUrl: loadedAssets.portraits[selectedCharId]?.url || FALLBACK_SPRITE,
-          spriteSheetType: loadedAssets.sprites[sheetId] ? 'GRID_3x3' : 'SINGLE'
+          spriteSheetType: loadedAssets.sprites[sheetId] ? 'GRID_4x4' : 'SINGLE'
       };
   };
 
