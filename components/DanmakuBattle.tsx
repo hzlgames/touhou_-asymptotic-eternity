@@ -8,6 +8,7 @@ interface DanmakuBattleProps {
   enemy: Enemy;
   onVictory: () => void;
   onDefeat: () => void;
+  sprites: Record<string, string>; // Map of sprite IDs to URLs
 }
 
 interface Shockwave {
@@ -20,7 +21,7 @@ interface Shockwave {
 // Phase thresholds for boss HP
 const PHASE_THRESHOLDS = [0.8, 0.5, 0.2]; 
 
-const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVictory, onDefeat }) => {
+const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVictory, onDefeat, sprites }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const [bossHp, setBossHp] = useState(enemy.maxHp);
@@ -42,6 +43,9 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
 
   const [playerSprite, setPlayerSprite] = useState<HTMLImageElement | null>(null);
   const [enemySprite, setEnemySprite] = useState<HTMLImageElement | null>(null);
+  
+  // Loaded bullet sprites
+  const spriteMapRef = useRef<Record<string, HTMLImageElement>>({});
 
   const isReimu = enemy.name.includes("Reimu");
 
@@ -59,18 +63,23 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
   });
 
   useEffect(() => {
-    const loadImages = () => {
-        const pImg = new Image();
-        pImg.src = character.pixelSpriteUrl;
-        pImg.onload = () => setPlayerSprite(pImg);
+    // Load Character/Enemy Sprites
+    const pImg = new Image();
+    pImg.src = character.pixelSpriteUrl;
+    pImg.onload = () => setPlayerSprite(pImg);
 
-        if (enemy.pixelSpriteUrl) {
-            const eImg = new Image();
-            eImg.src = enemy.pixelSpriteUrl;
-            eImg.onload = () => setEnemySprite(eImg);
-        }
-    };
-    loadImages();
+    if (enemy.pixelSpriteUrl) {
+        const eImg = new Image();
+        eImg.src = enemy.pixelSpriteUrl;
+        eImg.onload = () => setEnemySprite(eImg);
+    }
+    
+    // Load Bullet Sprites
+    Object.entries(sprites).forEach(([key, url]) => {
+        const img = new Image();
+        img.src = url;
+        spriteMapRef.current[key] = img;
+    });
 
     stateRef.current.player.hp = 3;
     stateRef.current.isRunning = true;
@@ -90,7 +99,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         stateRef.current.gameActive = true;
     }, 3000);
     return () => clearTimeout(timer);
-  }, [character, enemy, isReimu]);
+  }, [character, enemy, isReimu, sprites]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => { 
@@ -138,8 +147,6 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
       });
 
       // PHASE 1: 'Labor Sign "Overtime Yin-Yang Orbs"'
-      // Visual: Photocopier scanner effect. Reimu moves rigidly left/right.
-      // Action: Fires dense straight lines of Yin-Yang orbs downwards. Rigid, no beauty.
       if (phase === 1) {
           // Rapid fire scanner lines
           if (tick % 6 === 0) {
@@ -159,15 +166,13 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                        angle: Math.PI / 2 + (Math.random() - 0.5) * 0.1,
                        type: BulletType.TICKET, // "Paperwork"
                        color: '#cccccc',
-                       radius: 3
+                       radius: 6 // Increased hitbox for image
                    }));
               }
           }
       }
       
       // PHASE 2: 'Urgent Task "Deadline Pressure"'
-      // Visual: Giant Red Laser Bar descending. 
-      // Action: Player space shrinks. "Invoice" bullets rain down from the bar.
       else if (phase === 2) {
           // The bar logic is handled in the main update loop (crushingWallY)
           const wallY = stateRef.current.crushingWallY;
@@ -192,8 +197,6 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
       }
       
       // PHASE 3: 'Overwork "Anger of No Tea Time"'
-      // Visual: Throwing Tea Cups -> Explosion.
-      // Action: Spawns big bullet, pauses, explodes into shards.
       else if (phase === 3) {
           if (tick % 90 === 0) {
               // Throw Tea Cup
@@ -211,7 +214,6 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
       }
       
       // PHASE 4: 'System Meltdown "Blue Screen of Death"'
-      // Chaos, glitches.
       else if (phase === 4) {
           if (tick % 5 === 0) {
               bullets.push(createBullet({ 
@@ -219,7 +221,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                   y: Math.random() * CANVAS_HEIGHT * 0.5, 
                   speed: 2, 
                   angle: Math.random() * Math.PI * 2, 
-                  type: BulletType.GLITCH, color: '#00FFFF', radius: 3 
+                  type: BulletType.GLITCH, color: '#00FFFF', radius: 8 
               }));
           }
           if (tick % 60 === 0) {
@@ -537,30 +539,49 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                 ctx.globalAlpha = 1;
             }
 
-            if (b.type === BulletType.TICKET) { // Rectangular Ticket
-                ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle); 
-                ctx.fillRect(-6, -8, 12, 16); 
-                ctx.fillStyle = 'black'; 
-                // Draw lines on paper
-                ctx.fillRect(-4, -4, 8, 1); ctx.fillRect(-4, 0, 8, 1); ctx.fillRect(-4, 4, 6, 1);
-                ctx.restore();
-            } else if (b.type === BulletType.CUP) { // Tea Cup
-                ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
-                ctx.beginPath(); ctx.arc(0, 0, b.radius, 0, Math.PI, false); ctx.fill(); // Cup body
-                ctx.fillRect(-8, -8, 16, 2); // Rim
-                ctx.strokeStyle = b.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(6, -2, 4, 0, Math.PI*2); ctx.stroke(); // Handle
-                ctx.restore();
-            } else if (b.type === BulletType.SHARD) { // Sharp Triangle
-                ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
-                ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4, 4); ctx.lineTo(-4, 4); ctx.fill();
-                ctx.restore();
-            } else if (b.type === BulletType.ORB) { // Yin Yang
-                ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(state.boss.tick * 0.1); 
-                ctx.beginPath(); ctx.arc(0,0,b.radius, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(0,0,b.radius/2, 0, Math.PI*2); ctx.fill();
+            // Determine if we have a sprite for this bullet type
+            let spriteKey = null;
+            if (b.type === BulletType.TICKET) spriteKey = 'BULLET_TICKET';
+            else if (b.type === BulletType.CUP) spriteKey = 'BULLET_CUP';
+            else if (b.type === BulletType.SHARD) spriteKey = 'BULLET_SHARD';
+            else if (b.type === BulletType.GLITCH) spriteKey = 'BULLET_GLITCH';
+            else if (b.type === BulletType.AMULET) spriteKey = 'BULLET_OFUDA';
+
+            const sprite = spriteKey ? spriteMapRef.current[spriteKey] : null;
+
+            if (sprite) {
+                const sSize = b.radius * 3; // Scale sprite slightly larger than hit radius
+                ctx.save();
+                ctx.translate(b.x, b.y);
+                ctx.rotate(b.angle + (b.type === BulletType.CUP ? 0 : Math.PI/2)); // Rotate to match direction
+                ctx.drawImage(sprite, -sSize/2, -sSize/2, sSize, sSize);
                 ctx.restore();
             } else {
-                ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); ctx.fill();
+                // Fallback / Default Shapes
+                if (b.type === BulletType.TICKET) { 
+                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle); 
+                    ctx.fillRect(-6, -8, 12, 16); 
+                    ctx.fillStyle = 'black'; 
+                    ctx.fillRect(-4, -4, 8, 1); ctx.fillRect(-4, 0, 8, 1); ctx.fillRect(-4, 4, 6, 1);
+                    ctx.restore();
+                } else if (b.type === BulletType.CUP) { 
+                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
+                    ctx.beginPath(); ctx.arc(0, 0, b.radius, 0, Math.PI, false); ctx.fill(); 
+                    ctx.fillRect(-8, -8, 16, 2); 
+                    ctx.strokeStyle = b.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(6, -2, 4, 0, Math.PI*2); ctx.stroke();
+                    ctx.restore();
+                } else if (b.type === BulletType.SHARD) {
+                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
+                    ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4, 4); ctx.lineTo(-4, 4); ctx.fill();
+                    ctx.restore();
+                } else if (b.type === BulletType.ORB) { 
+                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(state.boss.tick * 0.1); 
+                    ctx.beginPath(); ctx.arc(0,0,b.radius, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(0,0,b.radius/2, 0, Math.PI*2); ctx.fill();
+                    ctx.restore();
+                } else {
+                    ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); ctx.fill();
+                }
             }
         });
         ctx.globalAlpha = 1;
@@ -604,7 +625,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
     };
     reqId = requestAnimationFrame(update);
     return () => cancelAnimationFrame(reqId);
-  }, [character, enemy, onDefeat, onVictory, playerSprite, enemySprite, isReimu, bossHp, currentPhase, bossShake]);
+  }, [character, enemy, onDefeat, onVictory, playerSprite, enemySprite, isReimu, bossHp, currentPhase, bossShake, sprites]);
 
   // Format Time: MM:SS:MS
   const formatTime = (ms: number) => {

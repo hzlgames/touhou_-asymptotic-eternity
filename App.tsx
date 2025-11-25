@@ -171,6 +171,31 @@ const App: React.FC = () => {
     setLoadingStatus(null);
   };
 
+  const loadCommonAssets = async () => {
+    // Only load if not already present
+    if (loadedAssets.sprites['BULLET_TICKET']) return;
+
+    setLoadingStatus("Compiling Combat Materials...");
+    
+    // List of special assets to generate
+    const assets = [
+        { id: 'ENEMY_FAIRY', name: 'Enemy: Fairy', desc: 'Standard fairy unit.', prompt: 'Pixel art anime fairy with robotic wings, holding a spear, chibi style, full body.' },
+        { id: 'BULLET_TICKET', name: 'Bullet: Invoice', desc: 'A flying tax document.', prompt: 'Pixel art red rectangular paper invoice document, glowing, cyberpunk style.' },
+        { id: 'BULLET_CUP', name: 'Bullet: Tea Cup', desc: 'A ceramic cup.', prompt: 'Pixel art white japanese tea cup, side view.' },
+        { id: 'BULLET_SHARD', name: 'Bullet: Shard', desc: 'A sharp fragment.', prompt: 'Pixel art jagged shard of blue glowing glass, sharp edges.' },
+        { id: 'BULLET_GLITCH', name: 'Bullet: Glitch', desc: 'Digital noise.', prompt: 'Pixel art square of colorful tv static noise, glitch effect.' },
+        { id: 'BULLET_OFUDA', name: 'Bullet: Talisman', desc: 'Paper charm.', prompt: 'Pixel art red paper charm ofuda with black ink calligraphy, vertical.' }
+    ];
+
+    for (const a of assets) {
+        // We reuse the 'sprite' type which maps to loadedAssets.sprites
+        const res = await fetchAsset(a.id, a.name, a.desc, 'sprite', a.prompt);
+        if (res) updateAssetRecord(a.id, 'sprite', res);
+    }
+    
+    setLoadingStatus(null);
+  };
+
   const loadEnemyAssets = async (enemy: Enemy) => {
       try {
           setLoadingStatus(`Manifesting Boss: ${enemy.name}...`);
@@ -233,6 +258,10 @@ const App: React.FC = () => {
     if (!basicReady || !propsReady) {
         await loadCharacterAssets(id);
     }
+    
+    // Load bullets and common enemies
+    await loadCommonAssets();
+
     setGameState(GameState.EXPLORATION);
   };
 
@@ -290,6 +319,14 @@ const App: React.FC = () => {
       if (loadedAssets.sprites['PROP_REIMU_WORK']) {
           result['PROP_REIMU_WORK'] = loadedAssets.sprites['PROP_REIMU_WORK'].url;
       }
+      return result;
+  };
+  
+  const getSpriteMap = () => {
+      const result: Record<string, string> = {};
+      Object.entries(loadedAssets.sprites).forEach(([key, val]) => {
+          result[key] = val.url;
+      });
       return result;
   };
 
@@ -390,6 +427,7 @@ const App: React.FC = () => {
             enemy={getCurrentEnemy()!}
             onVictory={handleVictory}
             onDefeat={handleDefeat}
+            sprites={getSpriteMap()}
           />
         );
 
