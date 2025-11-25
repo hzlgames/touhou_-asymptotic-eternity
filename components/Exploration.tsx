@@ -29,6 +29,9 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   const [flashOpacity, setFlashOpacity] = useState(0); 
   const [loopMessage, setLoopMessage] = useState<string | null>(null);
   
+  // Developer Mode State
+  const [devMode, setDevMode] = useState(false);
+  
   // Debounce encounter trigger
   const [encounterTriggered, setEncounterTriggered] = useState(false);
 
@@ -68,6 +71,10 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
     const handleKeyDown = (e: KeyboardEvent) => { 
         keysRef.current[e.key] = true;
         
+        if (e.key === 'F9') {
+            setDevMode(prev => !prev);
+        }
+
         if (e.code === 'Space' && !dialogue) {
             if (inventory.has('Obscure Lens')) {
                 setWorldType(prev => prev === WorldType.REALITY ? WorldType.INNER_WORLD : WorldType.REALITY);
@@ -122,11 +129,14 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         if (flashOpacity > 0) setFlashOpacity(prev => Math.max(0, prev - 0.1));
 
         if (worldType === WorldType.INNER_WORLD) {
-            setSanity(prev => Math.max(0, prev - 0.05)); 
-             if (sanity <= 0) {
-                 setWorldType(WorldType.REALITY);
-                 setDialogue({ title: "Sanity Depleted", text: "The chaotic waves of the Inner World are too strong. You are forced back to reality." });
-             }
+            // Disable sanity drain in Dev Mode
+            if (!devMode) {
+                setSanity(prev => Math.max(0, prev - 0.05)); 
+                 if (sanity <= 0) {
+                     setWorldType(WorldType.REALITY);
+                     setDialogue({ title: "Sanity Depleted", text: "The chaotic waves of the Inner World are too strong. You are forced back to reality." });
+                 }
+            }
         } else {
             setSanity(prev => Math.min(100, prev + 0.3));
         }
@@ -148,7 +158,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                     setIsMoving(true);
                     setPlayerGridPos({ x: nextX, y: nextY });
                     checkTriggers(nextX, nextY, mapData);
-                    setTimeout(() => setIsMoving(false), MOVEMENT_SPEED_MS);
+                    setTimeout(() => setIsMoving(false), devMode ? 50 : MOVEMENT_SPEED_MS); // Faster move in Dev Mode
                 }
             }
         }
@@ -161,10 +171,15 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [mapData, playerGridPos, worldType, dialogue, interactionTarget, sanity, flashOpacity, isMoving, inventory, encounterTriggered]);
+  }, [mapData, playerGridPos, worldType, dialogue, interactionTarget, sanity, flashOpacity, isMoving, inventory, encounterTriggered, devMode]);
 
   const isWalkable = (x: number, y: number, data: MapData, world: WorldType) => {
+      // Bounds check is always required
       if (x < 0 || x >= data.width || y < 0 || y >= data.height) return false;
+      
+      // Dev Mode Bypass
+      if (devMode) return true;
+
       const tile = data.tiles[y]?.[x];
       const blockers = [TileType.WALL, TileType.VOID, TileType.LOCKED_DOOR, TileType.PILLAR, TileType.BOOKSHELF, TileType.FURNACE];
       if (tile === TileType.WATER) return false;
@@ -254,9 +269,9 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             ) : (
                  <Stage1Bamboo mapData={mapData} worldType={worldType} propSprites={propSprites} />
             )}
-            <div className="absolute z-30" style={{ left: (playerGridPos.x * TILE_SIZE), top: (playerGridPos.y * TILE_SIZE) - (TILE_SIZE * 0.5), width: TILE_SIZE, height: TILE_SIZE, transition: `left ${MOVEMENT_SPEED_MS}ms linear, top ${MOVEMENT_SPEED_MS}ms linear` }}>
+            <div className="absolute z-30" style={{ left: (playerGridPos.x * TILE_SIZE), top: (playerGridPos.y * TILE_SIZE) - (TILE_SIZE * 0.5), width: TILE_SIZE, height: TILE_SIZE, transition: `left ${devMode ? 50 : MOVEMENT_SPEED_MS}ms linear, top ${devMode ? 50 : MOVEMENT_SPEED_MS}ms linear` }}>
                 {character.pixelSpriteUrl ? (
-                    <img src={isMoving ? character.pixelSpriteUrlWalk : character.pixelSpriteUrl} className="w-full h-full object-contain drop-shadow-lg" style={{ transform: `scaleX(${direction})` }} alt="Player" />
+                    <img src={isMoving ? character.pixelSpriteUrlWalk : character.pixelSpriteUrl} className={`w-full h-full object-contain drop-shadow-lg ${devMode ? 'opacity-50' : ''}`} style={{ transform: `scaleX(${direction})` }} alt="Player" />
                 ) : <div className="w-10 h-16 bg-pink-500 rounded-t-lg border-2 border-white"></div>}
             </div>
         </div>
@@ -271,6 +286,19 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                 </div>
             </div>
         </div>
+        
+        {/* DEV MODE INDICATOR */}
+        {devMode && (
+            <div className="absolute top-20 left-4 z-50 animate-pulse pointer-events-none">
+                 <div className="bg-red-600/90 text-white font-mono text-xs border border-white px-2 py-1 shadow-[0_0_10px_red]">
+                    [DEV MODE ACTIVE]
+                    <br/>NO_CLIP: ENABLED
+                    <br/>SPEED: 400%
+                    <br/>SANITY: LOCKED
+                 </div>
+            </div>
+        )}
+
         {loopMessage && (
             <div className="absolute top-32 left-1/2 -translate-x-1/2 z-50 animate-pulse">
                 <div className="bg-red-900/80 border-y-2 border-[#FFD700] text-[#FFD700] px-8 py-2 font-bold tracking-[0.5em] shadow-[0_0_20px_red] font-mono">{loopMessage}</div>
@@ -318,3 +346,4 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   );
 };
 export default Exploration;
+    
