@@ -499,6 +499,8 @@ const App: React.FC = () => {
       case GameState.EXPLORATION:
         return (
           <Exploration 
+            // We use timestamp as key to force a full re-mount when loading a save
+            key={savedExplorationState ? `loaded-${savedExplorationState.timestamp}` : 'new-game'}
             character={getCurrentCharacter()} 
             scenarioEnemies={currentScenario.enemies}
             onEncounter={handleEncounter}

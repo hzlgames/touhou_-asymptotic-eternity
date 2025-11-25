@@ -87,69 +87,88 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       timestamp: Date.now()
   });
 
+  // --- INPUT HANDLING ---
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => { 
-        keysRef.current[e.key] = true;
-        
-        if (e.key === 'Escape') {
-            if (showItemMenu) setShowItemMenu(false);
-            else setIsPaused(prev => !prev);
-        }
+      const handleKeyDown = (e: KeyboardEvent) => {
+          keysRef.current[e.key] = true;
+          
+          if (e.key === 'Escape') {
+              if (showItemMenu) {
+                  setShowItemMenu(false);
+              } else {
+                  setIsPaused(prev => !prev);
+              }
+              return; // Consume Escape
+          }
 
-        if (isPaused) return; // Block game input when paused
+          if (isPaused) return; // Block other inputs
+          
+          if (e.key === 'F9') setDevMode(prev => !prev);
+          
+          if ((e.code === 'Space' || e.key === ' ') && !dialogue) {
+              if (inventory.has('Obscure Lens')) {
+                  setWorldType(prev => prev === WorldType.REALITY ? WorldType.INNER_WORLD : WorldType.REALITY);
+              } else {
+                  setDialogue({ title: "System Restriction", text: "You sense a hidden layer to reality, but your naked eyes cannot perceive the 'Inner World'. You need a catalyst." });
+              }
+          }
+          
+          if ((e.key === 'z' || e.key === 'Enter') && !dialogue && interactionTarget) {
+              handleInteraction(interactionTarget);
+          }
+          
+          if ((e.key === 'z' || e.key === 'Enter') && dialogue) {
+              handleDialogueAdvance();
+          }
+      };
 
-        if (e.key === 'F9') {
-            setDevMode(prev => !prev);
-        }
+      const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key] = false; };
+      
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
 
-        if (e.code === 'Space' && !dialogue) {
-            if (inventory.has('Obscure Lens')) {
-                setWorldType(prev => prev === WorldType.REALITY ? WorldType.INNER_WORLD : WorldType.REALITY);
-            } else {
-                setDialogue({ title: "System Restriction", text: "You sense a hidden layer to reality, but your naked eyes cannot perceive the 'Inner World'. You need a catalyst." });
-            }
-        }
-        
-        if ((e.key === 'z' || e.key === 'Enter') && !dialogue && interactionTarget) {
-            handleInteraction(interactionTarget);
-        }
-        
-        // Handle Dialogue Advance
-        if ((e.key === 'z' || e.key === 'Enter') && dialogue) {
-            let isBossTrigger = false;
-            
-            if (dialogue.title.includes("Reimu")) {
-                const reimu = scenarioEnemies.find(e => e.name.includes('Reimu'));
-                if (reimu) {
-                    isBossTrigger = true;
-                    if (!encounterTriggered) {
-                        setEncounterTriggered(true);
-                        setDialogue(null); // Close dialogue first
-                        onEncounter(reimu, createSnapshot()); // PASS SNAPSHOT
-                    }
-                }
-            } else if (dialogue.title.includes("Marisa")) {
-                const marisa = scenarioEnemies.find(e => e.name.includes('Marisa'));
-                if (marisa) {
-                    isBossTrigger = true;
-                    if (!encounterTriggered) {
-                         setEncounterTriggered(true);
-                         setDialogue(null);
-                         onEncounter(marisa, createSnapshot()); // PASS SNAPSHOT
-                    }
-                }
-            } 
-            
-            if (!isBossTrigger) {
-                setDialogue(null);
-            }
-        }
-    };
-    const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key] = false; };
+      return () => {
+          window.removeEventListener('keydown', handleKeyDown);
+          window.removeEventListener('keyup', handleKeyUp);
+      };
+  }, [isPaused, showItemMenu, dialogue, interactionTarget, inventory, encounterTriggered]); // Isolated dependencies for Input
+
+  const handleDialogueAdvance = () => {
+    if (!dialogue) return;
     
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    let isBossTrigger = false;
+    const isReimu = dialogue.title.includes("Reimu");
+    const isMarisa = dialogue.title.includes("Marisa");
 
+    if (isReimu) {
+        const reimu = scenarioEnemies.find(e => e.name.includes('Reimu'));
+        if (reimu) {
+            isBossTrigger = true;
+            if (!encounterTriggered) {
+                setEncounterTriggered(true);
+                setDialogue(null);
+                onEncounter(reimu, createSnapshot());
+            }
+        }
+    } else if (isMarisa) {
+        const marisa = scenarioEnemies.find(e => e.name.includes('Marisa'));
+        if (marisa) {
+            isBossTrigger = true;
+            if (!encounterTriggered) {
+                 setEncounterTriggered(true);
+                 setDialogue(null);
+                 onEncounter(marisa, createSnapshot());
+            }
+        }
+    } 
+    
+    if (!isBossTrigger) {
+        setDialogue(null);
+    }
+  };
+
+  // --- GAME LOOP ---
+  useEffect(() => {
     const loop = setInterval(() => {
         if (!mapData || dialogue || encounterTriggered || isPaused) return;
 
@@ -193,11 +212,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
     }, 16);
 
-    return () => {
-        clearInterval(loop);
-        window.removeEventListener('keydown', handleKeyDown);
-        window.removeEventListener('keyup', handleKeyUp);
-    };
+    return () => clearInterval(loop);
   }, [mapData, playerGridPos, worldType, dialogue, interactionTarget, sanity, flashOpacity, isMoving, inventory, encounterTriggered, devMode, isPaused]);
 
   const isWalkable = (x: number, y: number, data: MapData, world: WorldType) => {
