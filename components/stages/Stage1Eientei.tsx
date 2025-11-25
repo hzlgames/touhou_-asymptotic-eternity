@@ -157,14 +157,14 @@ export const getStage1Data = (
 
   // 2. The Shrine Office (Background) - Positioned BEHIND Reimu
   entities.push({
-      id: 'shrine_desk', x: 20, y: 1, // High up to act as backdrop
+      id: 'shrine_desk', x: 20, y: 4, // High up to act as backdrop
       name: 'Shrine Office', color: 'red', interactionType: 'READ', isSolid: true, visibleIn: 'BOTH',
       onInteract: () => alert("The nerve center of Gensokyo's Reality Layer. It smells like ozone and old tea.")
   });
 
   // 3. The Shredder (Donation Box)
   entities.push({
-      id: 'shredder', x: 25, y: 5,
+      id: 'shredder', x: 24, y: 5,
       name: 'Donation Shredder', color: 'gray', interactionType: 'READ', isSolid: true, visibleIn: 'BOTH',
       onInteract: () => alert(isReality ? "A donation box modified into a paper shredder. It's aggressively chewing on a 'Feature Request' form." : "THE MAW. IT HUNGERS FOR DATA.")
   });
