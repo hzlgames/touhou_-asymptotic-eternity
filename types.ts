@@ -1,4 +1,5 @@
 
+
 export enum GameState {
   MENU = 'MENU',
   EXPLORATION = 'EXPLORATION',
@@ -198,4 +199,16 @@ export interface StageProps {
     mapData: MapData;
     worldType: WorldType;
     propSprites: Record<string, string>; // ID -> URL mapping for map props
+}
+
+// --- SAVE SYSTEM TYPES ---
+
+export interface SaveData {
+  characterId: CharacterId;
+  playerGridPos: { x: number, y: number };
+  worldType: WorldType;
+  sanity: number;
+  inventory: string[]; // Converted from Set for JSON
+  flags: string[];     // Converted from Set for JSON
+  timestamp: number;
 }

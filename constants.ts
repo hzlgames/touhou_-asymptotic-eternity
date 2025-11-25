@@ -10,10 +10,12 @@ export const ASSET_DIRS = {
     SPRITES: 'sprites',
     PORTRAITS: 'portraits',
     BACKGROUNDS: 'backgrounds',
-    AUDIO: 'audio'
+    AUDIO: 'audio',
+    SAVES: 'saves'
 };
 
 export const FILE_EXT = '.png';
+export const SAVE_EXT = '.json';
 
 export const FALLBACK_SPRITE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAALUlEQVRYR+3QQREAAAgCQfYvrWNgBw+ZgS87JLVO056AAQIECBAgQIAAAQIECTwCTyAAyI9F5QAAAABJRU5ErkJggg=='; // Transparent 32x32
 

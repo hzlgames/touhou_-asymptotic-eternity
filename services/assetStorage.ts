@@ -1,5 +1,6 @@
 
-import { ASSET_DIRS, FILE_EXT } from "../constants";
+import { ASSET_DIRS, FILE_EXT, SAVE_EXT } from "../constants";
+import { SaveData } from "../types";
 
 export type AssetType = 'sprite' | 'portrait' | 'background';
 
@@ -24,6 +25,7 @@ interface FileSystemWritableFileStream extends WritableStream {
 interface FileSystemDirectoryHandle extends FileSystemHandle {
     getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<FileSystemDirectoryHandle>;
     getFileHandle(name: string, options?: { create?: boolean }): Promise<FileSystemFileHandle>;
+    values(): AsyncIterable<FileSystemHandle>;
 }
 
 // Global reference to the root directory handle
@@ -79,6 +81,9 @@ export const connectFileSystem = async (): Promise<boolean> => {
         assetDirs[ASSET_DIRS.SPRITES] = await assetsHandle.getDirectoryHandle(ASSET_DIRS.SPRITES, { create: true });
         assetDirs[ASSET_DIRS.PORTRAITS] = await assetsHandle.getDirectoryHandle(ASSET_DIRS.PORTRAITS, { create: true });
         assetDirs[ASSET_DIRS.BACKGROUNDS] = await assetsHandle.getDirectoryHandle(ASSET_DIRS.BACKGROUNDS, { create: true });
+        
+        // 3. Create/Get 'saves' folder
+        assetDirs[ASSET_DIRS.SAVES] = await rootDirHandle.getDirectoryHandle(ASSET_DIRS.SAVES, { create: true });
 
         console.log("[FS] File System Connected & Structure Verified");
         return true;
@@ -144,5 +149,64 @@ export const saveAssetToFS = async (id: string, type: AssetType, dataUrl: string
     } catch (e) {
         console.error(`[FS] Failed to write file ${id}:`, e);
         throw e; // Re-throw to handle in App.tsx
+    }
+};
+
+// --- SAVE GAME SYSTEM ---
+
+export const getSavedGames = async (): Promise<string[]> => {
+    if (!assetDirs[ASSET_DIRS.SAVES]) return [];
+    
+    const files: string[] = [];
+    try {
+        for await (const entry of assetDirs[ASSET_DIRS.SAVES].values()) {
+            if (entry.kind === 'file' && entry.name.endsWith(SAVE_EXT)) {
+                files.push(entry.name);
+            }
+        }
+    } catch (e) {
+        console.error("Error listing saves:", e);
+    }
+    // Sort by name descending (timestamp usually)
+    return files.sort().reverse();
+};
+
+export const saveGameData = async (data: SaveData): Promise<boolean> => {
+    if (!assetDirs[ASSET_DIRS.SAVES]) {
+        alert("File System not connected. Cannot save.");
+        return false;
+    }
+
+    try {
+        const filename = `save_${Date.now()}${SAVE_EXT}`;
+        const fileHandle = await assetDirs[ASSET_DIRS.SAVES].getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        
+        const jsonStr = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        
+        await writable.write(blob);
+        await writable.close();
+        
+        console.log(`[FS] Game saved to ${filename}`);
+        return true;
+    } catch (e) {
+        console.error("Failed to save game:", e);
+        alert("Failed to save game.");
+        return false;
+    }
+};
+
+export const loadGameData = async (filename: string): Promise<SaveData | null> => {
+    if (!assetDirs[ASSET_DIRS.SAVES]) return null;
+
+    try {
+        const fileHandle = await assetDirs[ASSET_DIRS.SAVES].getFileHandle(filename);
+        const file = await fileHandle.getFile();
+        const text = await file.text();
+        return JSON.parse(text) as SaveData;
+    } catch (e) {
+        console.error("Failed to load save:", e);
+        return null;
     }
 };

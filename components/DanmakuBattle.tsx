@@ -8,7 +8,9 @@ interface DanmakuBattleProps {
   enemy: Enemy;
   onVictory: () => void;
   onDefeat: () => void;
-  sprites: Record<string, string>; // Map of sprite IDs to URLs
+  onRetreat: () => void; // New prop for returning to map
+  onQuit: () => void; // New prop for returning to title
+  sprites: Record<string, string>; 
 }
 
 interface Shockwave {
@@ -29,7 +31,7 @@ interface PlayerOption {
 const PHASE_THRESHOLDS = [0.8, 0.5, 0.2]; 
 const LENS_RADIUS = 150;
 
-const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVictory, onDefeat, sprites }) => {
+const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVictory, onDefeat, onRetreat, onQuit, sprites }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const [bossHp, setBossHp] = useState(enemy.maxHp);
@@ -655,8 +657,6 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
 
             // Draw Bullets
             state.bullets.forEach(b => {
-                // If calculating for Void, only draw if inside lens (approx for performance, clipping handles real cut)
-                // Actually, just draw all, clipping handles it.
                 
                 if (state.timeStopTimer > 0 && b.isEnemy) {
                     ctx.fillStyle = '#555555'; 
@@ -840,7 +840,8 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                     <h2 className="text-4xl text-cyan-400 font-mono mb-8 tracking-[0.5em]">PAUSED</h2>
                     <div className="flex flex-col gap-4">
                         <button onClick={() => setIsPaused(false)} className="px-8 py-2 border border-cyan-500 text-cyan-500 hover:bg-cyan-500 hover:text-black font-mono">RESUME</button>
-                        <button onClick={onDefeat} className="px-8 py-2 border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-mono">GIVE UP</button>
+                        <button onClick={onRetreat} className="px-8 py-2 border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black font-mono">GIVE UP (RETREAT)</button>
+                        <button onClick={onQuit} className="px-8 py-2 border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-mono">RETURN TO TITLE</button>
                     </div>
                 </div>
             )}

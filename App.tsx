@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Exploration from './components/Exploration';
 import DanmakuBattle from './components/DanmakuBattle';
-import { Character, CharacterId, Enemy, GameState, Scenario } from './types';
+import { Character, CharacterId, Enemy, GameState, Scenario, SaveData } from './types';
 import { CHARACTERS, SCENARIOS, FALLBACK_SPRITE } from './constants';
 import { getOrGenerateAsset } from './services/geminiService';
 import { 
@@ -10,7 +10,10 @@ import {
     isFileSystemConnected, 
     saveAssetToFS, 
     loadAssetFromFS, 
-    AssetType 
+    AssetType,
+    getSavedGames,
+    saveGameData,
+    loadGameData
 } from './services/assetStorage';
 
 // Helper to prevent infinite loading screens
@@ -30,6 +33,11 @@ const App: React.FC = () => {
   const [currentScenario, setCurrentScenario] = useState<Scenario>(SCENARIOS[CharacterId.KAGUYA]);
   const [activeEnemy, setActiveEnemy] = useState<Enemy | null>(null);
   const [hasFsAccess, setHasFsAccess] = useState(false);
+
+  // Persistence State
+  const [savedExplorationState, setSavedExplorationState] = useState<SaveData | undefined>(undefined);
+  const [saveFiles, setSaveFiles] = useState<string[]>([]);
+  const [showLoadMenu, setShowLoadMenu] = useState(false);
 
   // Store Asset Info
   const [loadedAssets, setLoadedAssets] = useState<{
@@ -240,12 +248,11 @@ const App: React.FC = () => {
 
   // --- Interaction Handlers ---
 
-  const handleCharacterSelect = async (id: CharacterId) => {
+  const prepareGame = async (id: CharacterId) => {
     setSelectedCharId(id);
     const scenario = SCENARIOS[id];
     setCurrentScenario(scenario);
     
-    // Check if critical assets are ready in memory
     const basicReady = loadedAssets.sprites[id] && loadedAssets.portraits[id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
     let propsReady = true;
     if (id === CharacterId.KAGUYA) {
@@ -254,32 +261,65 @@ const App: React.FC = () => {
          propsReady = !!(loadedAssets.props['PROP_BAMBOO_TREE']);
     }
 
-    // Force load if not ready (this triggers FS check inside fetchAsset)
     if (!basicReady || !propsReady) {
         await loadCharacterAssets(id);
     }
     
-    // Load bullets and common enemies
     await loadCommonAssets();
+  };
 
+  const handleCharacterSelect = async (id: CharacterId) => {
+    setSavedExplorationState(undefined); // Reset previous state on new game
+    await prepareGame(id);
     setGameState(GameState.EXPLORATION);
   };
 
-  const handleEncounter = async (enemy: Enemy) => {
+  const handleLoadGame = async (filename: string) => {
+      setShowLoadMenu(false);
+      setLoadingStatus(`Loading ${filename}...`);
+      const data = await loadGameData(filename);
+      if (data) {
+          setSavedExplorationState(data);
+          await prepareGame(data.characterId);
+          setGameState(GameState.EXPLORATION);
+      } else {
+          alert("Failed to load save file.");
+      }
+      setLoadingStatus(null);
+  };
+
+  const handleSaveGame = async (data: SaveData) => {
+      await saveGameData(data);
+      // Update local cache of Exploration state so if player returns to menu and back without full reload, it's consistent
+      setSavedExplorationState(data);
+  };
+
+  const handleEncounter = async (enemy: Enemy, snapshot: SaveData) => {
     if (loadingStatus) return; // Prevent double trigger
     
+    // Save the snapshot of exploration state
+    setSavedExplorationState(snapshot);
+
     setLoadingStatus(`Encounter initiated: ${enemy.name}`);
-    
-    // Wait for assets to ensure background is ready before switching state
     await loadEnemyAssets(enemy);
-    
     setActiveEnemy(enemy);
     setGameState(GameState.BATTLE);
     setLoadingStatus(null);
   };
 
+  // Return to Map Logic
+  const handleRetreat = () => {
+      setGameState(GameState.EXPLORATION);
+      setActiveEnemy(null);
+  };
+
   const handleVictory = () => setGameState(GameState.VICTORY);
   const handleDefeat = () => setGameState(GameState.GAME_OVER);
+  const handleQuitToTitle = () => {
+      setGameState(GameState.MENU);
+      setSavedExplorationState(undefined);
+      setActiveEnemy(null);
+  };
 
   const getCurrentCharacter = (): Character => {
       const base = CHARACTERS[selectedCharId];
@@ -295,7 +335,6 @@ const App: React.FC = () => {
       if (!activeEnemy) return null;
       let bgUrl = loadedAssets.backgrounds[activeEnemy.name]?.url || '';
       
-      // Override for Reimu BG
       if (activeEnemy.name.includes('Reimu') && loadedAssets.backgrounds['STAGE1_BOSS_BG']) {
           bgUrl = loadedAssets.backgrounds['STAGE1_BOSS_BG'].url;
       } else if (!bgUrl && loadedAssets.backgrounds[`${activeEnemy.name}_BG`]) {
@@ -306,7 +345,7 @@ const App: React.FC = () => {
           ...activeEnemy,
           pixelSpriteUrl: loadedAssets.enemySprites[activeEnemy.name]?.url || FALLBACK_SPRITE,
           backgroundUrl: bgUrl,
-          portraitUrl: loadedAssets.portraits[activeEnemy.name]?.url // Pass the enemy portrait
+          portraitUrl: loadedAssets.portraits[activeEnemy.name]?.url
       };
   };
 
@@ -315,7 +354,6 @@ const App: React.FC = () => {
       Object.entries(loadedAssets.props).forEach(([key, val]) => {
           result[key] = val.url;
       });
-      // Also inject Reimu boss sprite for the map
       if (loadedAssets.sprites['PROP_REIMU_WORK']) {
           result['PROP_REIMU_WORK'] = loadedAssets.sprites['PROP_REIMU_WORK'].url;
       }
@@ -330,6 +368,20 @@ const App: React.FC = () => {
       return result;
   };
 
+  const handleOpenLoadMenu = async () => {
+      if (!hasFsAccess) {
+          const success = await connectFileSystem();
+          if (!success) {
+              setHasFsAccess(false);
+              return;
+          }
+          setHasFsAccess(true);
+      }
+      const files = await getSavedGames();
+      setSaveFiles(files);
+      setShowLoadMenu(true);
+  };
+
   // --- Render ---
 
   const renderContent = () => {
@@ -341,6 +393,35 @@ const App: React.FC = () => {
                 <div className="text-white text-lg font-mono border-y border-blue-500/30 py-2 px-10 bg-black/40">{loadingStatus}</div>
             </div>
         )
+    }
+
+    if (showLoadMenu) {
+        return (
+            <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center font-serif text-white">
+                <h2 className="text-3xl text-blue-300 mb-8 border-b border-blue-500 pb-2">LOAD RECORD</h2>
+                <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto w-full max-w-md bg-white/5 border border-gray-700 p-4">
+                    {saveFiles.length === 0 ? (
+                        <div className="text-gray-500 text-center py-8">NO RECORDS FOUND</div>
+                    ) : (
+                        saveFiles.map(file => (
+                            <button 
+                                key={file}
+                                onClick={() => handleLoadGame(file)}
+                                className="text-left px-4 py-3 hover:bg-blue-900/50 border border-transparent hover:border-blue-500 font-mono text-sm transition-colors"
+                            >
+                                {file}
+                            </button>
+                        ))
+                    )}
+                </div>
+                <button 
+                    onClick={() => setShowLoadMenu(false)}
+                    className="mt-8 px-8 py-2 border border-gray-500 text-gray-400 hover:text-white hover:border-white transition-colors"
+                >
+                    CANCEL
+                </button>
+            </div>
+        );
     }
 
     switch (gameState) {
@@ -357,7 +438,7 @@ const App: React.FC = () => {
                      </h2>
                 </div>
                 
-                <div className="mb-12">
+                <div className="mb-12 flex flex-col items-center gap-4">
                     {!hasFsAccess ? (
                         <button 
                             onClick={handleFileSystemConnect}
@@ -370,6 +451,13 @@ const App: React.FC = () => {
                              SYSTEM LINK: STABLE (Assets will be saved)
                          </div>
                     )}
+                    
+                    <button 
+                        onClick={handleOpenLoadMenu}
+                        className="border border-blue-500 text-blue-300 hover:bg-blue-900 hover:text-white px-12 py-3 font-mono text-sm tracking-widest transition-all duration-300"
+                    >
+                        LOAD GAME
+                    </button>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-16 w-full max-w-5xl px-8">
@@ -399,7 +487,7 @@ const App: React.FC = () => {
                              ) : <span className="text-4xl opacity-20">?</span>}
                         </div>
                         <div className="mt-6 py-3 text-center text-xs font-bold tracking-[0.2em] border border-gray-700 text-gray-400 group-hover:bg-white/10">
-                            START GAME
+                            NEW GAME
                         </div>
                     </div>
                 )})}
@@ -414,8 +502,11 @@ const App: React.FC = () => {
             character={getCurrentCharacter()} 
             scenarioEnemies={currentScenario.enemies}
             onEncounter={handleEncounter}
+            onSave={handleSaveGame}
+            onQuit={handleQuitToTitle}
             backgroundUrl={loadedAssets.backgrounds[`${currentScenario.id}_MAP`]?.url}
             propSprites={getPropSprites()}
+            initialState={savedExplorationState}
           />
         );
 
@@ -427,6 +518,8 @@ const App: React.FC = () => {
             enemy={getCurrentEnemy()!}
             onVictory={handleVictory}
             onDefeat={handleDefeat}
+            onRetreat={handleRetreat}
+            onQuit={handleQuitToTitle}
             sprites={getSpriteMap()}
           />
         );
@@ -439,7 +532,7 @@ const App: React.FC = () => {
                     {gameState === GameState.VICTORY ? 'PHANTASM CLEARED' : 'GAME OVER'}
                 </h1>
                 <button 
-                  onClick={() => setGameState(GameState.MENU)}
+                  onClick={handleQuitToTitle}
                   className="px-8 py-3 border border-white/50 hover:bg-white hover:text-black transition-colors"
                 >
                   RETURN TO TITLE
