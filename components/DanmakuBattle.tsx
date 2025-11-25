@@ -136,8 +136,9 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
     const handleKeyDown = (e: KeyboardEvent) => { 
         stateRef.current.keys[e.key] = true; 
         
-        if (e.key === 'Escape') {
-            e.preventDefault(); // Stop browser default (e.g. exit fullscreen)
+        // TAB Handling (Pause)
+        if (e.key === 'Tab') {
+            e.preventDefault(); // Stop browser default
             e.stopPropagation();
             setIsPaused(prev => !prev);
         }
@@ -920,7 +921,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                 
                 <div className="mt-8">
                      <div className="text-cyan-800 text-xs mb-1">SYSTEM CONTROLS</div>
-                     <div className="text-xs text-gray-400">ESC - PAUSE</div>
+                     <div className="text-xs text-gray-400">TAB - PAUSE</div>
                      <div className="text-xs text-gray-400">SHIFT - FOCUS</div>
                      <div className="text-xs text-gray-400">Z - FIRE</div>
                      <div className="text-xs text-gray-400">X - BOMB</div>

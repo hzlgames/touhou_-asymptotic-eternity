@@ -120,9 +120,9 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           keysRef.current[e.key] = true;
           const s = stateRef.current;
 
-          // ESC Handling
-          if (e.key === 'Escape') {
-              e.preventDefault(); // CRITICAL: Stop browser defaults
+          // TAB Handling (Pause)
+          if (e.key === 'Tab') {
+              e.preventDefault(); // CRITICAL: Stop browser defaults (focus navigation)
               e.stopPropagation();
 
               if (s.showItemMenu) {
@@ -430,7 +430,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                          </div>
                      </div>
                 )}
-                <div className="mt-2 text-[10px] text-gray-500 text-right">[ESC] PAUSE / MENU</div>
+                <div className="mt-2 text-[10px] text-gray-500 text-right">[TAB] PAUSE / MENU</div>
             </div>
         </div>
         {interactionTarget && !dialogue && !isPaused && (
