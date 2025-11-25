@@ -146,6 +146,7 @@ const App: React.FC = () => {
         }
 
         // PRELOAD Stage 1 Boss BG for Kaguya
+        // We explicitly ask for STAGE1_BOSS_BG. If on local FS, it loads the file. If not, generates.
         setLoadingStatus("Generating Admin Tunnel...");
         const bossBg = await fetchAsset(
             'STAGE1_BOSS_BG',
@@ -210,9 +211,8 @@ const App: React.FC = () => {
           if (portrait) updateAssetRecord(enemy.name, 'portrait', portrait);
 
           // 3. Background
-          // If it's Stage 1 Reimu, use the special Boss BG we preloaded or fetch it now
+          // Force usage of STAGE1_BOSS_BG for Reimu if available
           if (enemy.name.includes("Reimu")) {
-               // Re-fetch (or load from FS) the specific BG ID
                const bg = await fetchAsset(
                     'STAGE1_BOSS_BG', 
                     'Bureaucratic Tunnel', 

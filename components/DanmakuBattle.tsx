@@ -18,8 +18,16 @@ interface Shockwave {
   alpha: number;
 }
 
+interface PlayerOption {
+    angle: number;
+    targetAngle: number;
+    dist: number;
+    color: string;
+}
+
 // Phase thresholds for boss HP
 const PHASE_THRESHOLDS = [0.8, 0.5, 0.2]; 
+const LENS_RADIUS = 150;
 
 const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVictory, onDefeat, sprites }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -28,7 +36,8 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
   const [playerHp, setPlayerHp] = useState(3);
   const [score, setScore] = useState(0);
   const [graze, setGraze] = useState(0);
-  const [bombs, setBombs] = useState(3); // Start with 3 bombs
+  const [bombs, setBombs] = useState(3); 
+  const [isPaused, setIsPaused] = useState(false);
   
   // Phase Management
   const [currentPhase, setCurrentPhase] = useState(1);
@@ -50,7 +59,15 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
   const isReimu = enemy.name.includes("Reimu");
 
   const stateRef = useRef({
-    player: { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT - 100, isFocus: false, iframes: 0, shootTimer: 0, hp: 3 },
+    player: { 
+        x: CANVAS_WIDTH / 2, 
+        y: CANVAS_HEIGHT - 100, 
+        isFocus: false, 
+        iframes: 0, 
+        shootTimer: 0, 
+        hp: 3,
+        options: [] as PlayerOption[]
+    },
     bullets: [] as Bullet[],
     particles: [] as Particle[],
     shockwaves: [] as Shockwave[],
@@ -61,6 +78,18 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
     isRunning: true,
     gameActive: false
   });
+
+  // Initialize Kaguya's Options
+  useEffect(() => {
+      // 5 Options for 5 Impossible Requests
+      stateRef.current.player.options = [
+          { angle: 0, targetAngle: 0, dist: 40, color: '#ff0000' }, // Jewel (Red)
+          { angle: 72, targetAngle: 72, dist: 40, color: '#00ff00' }, // Branch (Green)
+          { angle: 144, targetAngle: 144, dist: 40, color: '#0000ff' }, // Robe (Blue)
+          { angle: 216, targetAngle: 216, dist: 40, color: '#ffff00' }, // Bowl (Yellow/Gold)
+          { angle: 288, targetAngle: 288, dist: 40, color: '#ff00ff' }  // Shell (Purple)
+      ];
+  }, []);
 
   useEffect(() => {
     // Load Character/Enemy Sprites
@@ -92,7 +121,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
     setShowCutIn(true);
     
     // Initial Phase Name
-    setPhaseName(isReimu ? 'Labor Sign "Overtime Yin-Yang Orbs"' : enemy.spellCardName);
+    setPhaseName(isReimu ? 'Labor Sign "Scanline Printer"' : enemy.spellCardName);
 
     const timer = setTimeout(() => {
         setShowCutIn(false);
@@ -105,8 +134,12 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
     const handleKeyDown = (e: KeyboardEvent) => { 
         stateRef.current.keys[e.key] = true; 
         
+        if (e.key === 'Escape') {
+            setIsPaused(prev => !prev);
+        }
+
         // BOMB TRIGGER (Kaguya: Time Stagnation)
-        if ((e.key === 'x' || e.key === 'X') && stateRef.current.gameActive && !stateRef.current.keys['x_held']) {
+        if (!isPaused && (e.key === 'x' || e.key === 'X') && stateRef.current.gameActive && !stateRef.current.keys['x_held']) {
              stateRef.current.keys['x_held'] = true;
              triggerBomb();
         }
@@ -123,7 +156,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
       window.removeEventListener('keyup', handleKeyUp);
       stateRef.current.isRunning = false;
     };
-  }, []);
+  }, [isPaused]);
 
   const triggerBomb = () => {
       if (bombs > 0 && stateRef.current.timeStopTimer <= 0) {
@@ -146,29 +179,41 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
           maxReflections: 0, ...props
       });
 
-      // PHASE 1: 'Labor Sign "Overtime Yin-Yang Orbs"'
+      // PHASE 1: 'Labor Sign "Scanline Printer"' (Redesigned)
+      // Aesthetic: Scans across the screen rigidly, leaving gaps.
       if (phase === 1) {
-          // Rapid fire scanner lines
-          if (tick % 6 === 0) {
-              // Main Scanner Beam
-              bullets.push(createBullet({ 
-                  x: bx, y: by + 20, 
-                  speed: 3.5, angle: Math.PI / 2, 
-                  type: BulletType.ORB, color: '#FF4444', radius: 8 
-              }));
+          const scanPeriod = 60; // Frames per scan line spawn
+          if (tick % scanPeriod === 0) {
+              const gapX = (Math.sin(tick * 0.05) * 200) + CANVAS_WIDTH / 2;
               
-              // "Residual" Image (Leftovers from the scan)
-              if (Math.random() > 0.5) {
-                   bullets.push(createBullet({
-                       x: bx + (Math.random() - 0.5) * 40,
-                       y: by,
-                       speed: 1.5, // Slow
-                       angle: Math.PI / 2 + (Math.random() - 0.5) * 0.1,
-                       type: BulletType.TICKET, // "Paperwork"
-                       color: '#cccccc',
-                       radius: 6 // Increased hitbox for image
-                   }));
+              for (let x = 20; x < CANVAS_WIDTH - 20; x += 30) {
+                  // Leave a gap around the sine wave
+                  if (Math.abs(x - gapX) < 60) continue;
+
+                  // Vertical Line
+                  bullets.push(createBullet({ 
+                      x: x, 
+                      y: 50, 
+                      speed: 2.0, 
+                      angle: Math.PI / 2, 
+                      type: BulletType.TICKET, // Rectangles
+                      color: '#ffcccc', 
+                      radius: 6,
+                      delay: (x / CANVAS_WIDTH) * 20 // Wave effect delay
+                  }));
               }
+          }
+          // Occasional "Paper Jam" (Random Debris)
+          if (tick % 20 === 0) {
+               bullets.push(createBullet({
+                   x: bx + (Math.random() - 0.5) * 100,
+                   y: by + 20,
+                   speed: 1.5,
+                   angle: Math.PI / 2 + (Math.random() - 0.5),
+                   type: BulletType.SHARD,
+                   color: 'red',
+                   radius: 3
+               }));
           }
       }
       
@@ -250,7 +295,13 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
     let reqId: number;
 
     const update = () => {
-        if (!stateRef.current.isRunning) return;
+        if (!stateRef.current.isRunning || isPaused) {
+             // Keep drawing even if paused
+             draw(ctx);
+             reqId = requestAnimationFrame(update);
+             return;
+        }
+
         const state = stateRef.current;
         const { keys } = state;
         
@@ -277,7 +328,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         // --- PHASE TRANSITION LOGIC ---
         const hpPercent = bossHp / enemy.maxHp;
         let newPhase = 1;
-        let pName = 'Labor Sign "Overtime Yin-Yang Orbs"';
+        let pName = 'Labor Sign "Scanline Printer"';
         
         if (isReimu) {
              if (hpPercent < PHASE_THRESHOLDS[2]) { newPhase = 4; pName = 'System Meltdown "Blue Screen of Death"'; }
@@ -322,13 +373,60 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         if ((keys['ArrowUp'] || keys['w']) && state.player.y > 10 + topLimit) state.player.y -= moveSpeed;
         if ((keys['ArrowDown'] || keys['s']) && state.player.y < CANVAS_HEIGHT - 10) state.player.y += moveSpeed;
 
+        // --- UPDATE OPTIONS (KAGUYA) ---
+        state.player.options.forEach((opt, i) => {
+            const rotSpeed = 2.0;
+            if (isFocus) {
+                // Focus: Form a tight arc behind/around player
+                // Angles: 230, 250, 270, 290, 310 (Behind/Up)
+                opt.targetAngle = 270 + (i - 2) * 20; 
+                opt.dist = 30;
+            } else {
+                // Unfocus: Rotate continuously
+                opt.targetAngle = (opt.angle + rotSpeed) % 360; 
+                opt.dist = 50;
+            }
+            
+            // Lerp angle
+            // Simple rotation handling for now
+            if (isFocus) {
+                opt.angle += (opt.targetAngle - opt.angle) * 0.1;
+            } else {
+                opt.angle = opt.targetAngle;
+            }
+        });
+
         // Shooting
         if (keys['z'] || keys[' ']) {
             if (state.player.shootTimer <= 0) {
-                // Kaguya's shots are distinct colors
-                state.bullets.push({ x: state.player.x - 8, y: state.player.y - 10, speed: 12, angle: -Math.PI / 2, accel: 0, angularVelocity: 0, radius: 4, type: BulletType.RICE, color: character.bulletColor, isEnemy: false, id: Math.random(), grazed: false });
-                state.bullets.push({ x: state.player.x + 8, y: state.player.y - 10, speed: 12, angle: -Math.PI / 2, accel: 0, angularVelocity: 0, radius: 4, type: BulletType.RICE, color: character.bulletColor, isEnemy: false, id: Math.random(), grazed: false });
-                state.player.shootTimer = 5;
+                // Main Body Shot
+                state.bullets.push({ 
+                    x: state.player.x, y: state.player.y - 10, 
+                    speed: 15, angle: -Math.PI / 2, accel: 0, angularVelocity: 0, radius: 4, 
+                    type: BulletType.RICE, color: 'white', isEnemy: false, id: Math.random(), grazed: false 
+                });
+
+                // Option Shots (The 5 Impossible Requests)
+                state.player.options.forEach(opt => {
+                    const rad = opt.angle * (Math.PI / 180);
+                    const ox = state.player.x + Math.cos(rad) * opt.dist;
+                    const oy = state.player.y + Math.sin(rad) * opt.dist;
+                    
+                    state.bullets.push({
+                        x: ox, y: oy,
+                        speed: 12,
+                        angle: -Math.PI / 2, // Always shoot up
+                        accel: 0, angularVelocity: 0,
+                        radius: 3,
+                        type: BulletType.DOT,
+                        color: opt.color,
+                        isEnemy: false,
+                        id: Math.random(),
+                        grazed: false
+                    });
+                });
+
+                state.player.shootTimer = 4; // Fast fire
             }
             state.player.shootTimer--;
         }
@@ -339,12 +437,16 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
             
             if (isReimu) {
                 if (currentPhase === 1) {
-                    // PHOTOCOPIER MOVEMENT: Rigid Left-Right Scan
-                    // Move speed constant, change dir at edges
-                    const scanSpeed = 3;
-                    state.boss.x += Math.cos(state.boss.tick * 0.05) * scanSpeed;
-                    state.boss.y = 80; // Stay fixed Y
-                    state.boss.x = Math.max(50, Math.min(CANVAS_WIDTH-50, state.boss.x));
+                    // PHOTOCOPIER: Step Movement
+                    if (state.boss.tick % 60 === 0) {
+                        // Move to a new distinct lane
+                        const dest = 100 + Math.random() * (CANVAS_WIDTH - 200);
+                        state.boss.targetX = dest;
+                    }
+                    state.boss.y = 80;
+                    // Snap movement
+                    state.boss.x += (state.boss.targetX - state.boss.x) * 0.1;
+                    
                 } else if (currentPhase === 2) {
                     // DEADLINE: Hover above the wall
                     state.boss.targetY = state.crushingWallY - 40; 
@@ -381,10 +483,25 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         for (let i = state.bullets.length - 1; i >= 0; i--) {
             const b = state.bullets[i];
             
+            // Check Lens Effect (Inner World)
+            const distToLens = Math.sqrt(Math.pow(b.x - CANVAS_WIDTH/2, 2) + Math.pow(b.y - CANVAS_HEIGHT/2, 2));
+            const inLens = distToLens < LENS_RADIUS;
+            
             // Apply Time Stop Freeze
-            const currentSpeed = b.isEnemy ? b.speed * timeScale : b.speed;
-            const currentAccel = b.isEnemy ? b.accel * timeScale : b.accel;
-            const currentAngVel = b.isEnemy ? b.angularVelocity * timeScale : b.angularVelocity;
+            let currentSpeed = b.isEnemy ? b.speed * timeScale : b.speed;
+            let currentAccel = b.isEnemy ? b.accel * timeScale : b.accel;
+            let currentAngVel = b.isEnemy ? b.angularVelocity * timeScale : b.angularVelocity;
+
+            // Lens Effect Modifiers
+            if (inLens && b.isEnemy) {
+                currentSpeed *= 0.7; // Slow down inside the lens ("Truth" is heavier)
+                b.color = '#ff0000'; // Turn bullets red/evil
+            }
+
+            if (b.delay && b.delay > 0) {
+                b.delay--;
+                continue; // Don't move yet
+            }
 
             // Exploding Cup Logic (Tea Time)
             if (b.type === BulletType.CUP && b.timer !== undefined) {
@@ -440,17 +557,21 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                         state.player.hp -= 1;
                         setPlayerHp(state.player.hp);
                         
+                        // HIT FEEDBACK:
+                        // 1. Clear Screen
+                        state.bullets = state.bullets.filter(bull => !bull.isEnemy);
+                        // 2. Pause Boss
+                        state.boss.cooldown = 180; // 3 seconds of peace
+                        // 3. Shockwave
+                        state.shockwaves.push({ x: state.player.x, y: state.player.y, r: 10, alpha: 1.0 });
+                        
                         setIsGlitching(true);
                         setTimeout(() => setIsGlitching(false), 200);
-                        state.shockwaves.push({ x: state.player.x, y: state.player.y, r: 10, alpha: 1.0 });
 
                         if (state.player.hp <= 0) { stateRef.current.isRunning = false; onDefeat(); }
                         else {
                             state.player.iframes = 120;
-                            // Auto-clear nearby bullets on hit
-                            state.bullets = state.bullets.filter(bull => !bull.isEnemy || Math.hypot(bull.x - state.player.x, bull.y - state.player.y) > 150); 
                             setBombs(3); // Reset bombs on death
-                            state.boss.cooldown = 120;
                         }
                         break; 
                     }
@@ -487,145 +608,194 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
     const draw = (ctx: CanvasRenderingContext2D) => {
         const state = stateRef.current;
         ctx.clearRect(0,0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        ctx.save();
         
         // System Meltdown Shake
+        ctx.save();
         if (currentPhase === 4) {
             ctx.translate((Math.random()-0.5)*6, (Math.random()-0.5)*6);
         }
 
-        // Draw Boss
-        let bx = state.boss.x;
-        let by = state.boss.y;
-        if (bossShake > 0) {
-            bx += (Math.random()-0.5)*5;
-            by += (Math.random()-0.5)*5;
-        }
-
-        if (enemySprite) {
-            const size = 96;
-            ctx.drawImage(enemySprite, bx - size/2, by - size/2, size, size);
-        } else {
-            ctx.fillStyle = 'red';
-            ctx.beginPath(); ctx.arc(bx, by, 30, 0, Math.PI*2); ctx.fill();
-        }
-
-        // Draw Deadline Wall (Phase 2)
-        if (isReimu && currentPhase === 2 && state.crushingWallY > 0) {
-            const y = state.crushingWallY;
-            const grad = ctx.createLinearGradient(0, y-100, 0, y);
-            grad.addColorStop(0, 'rgba(255,0,0,0)');
-            grad.addColorStop(1, 'rgba(255,0,0,0.6)');
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, CANVAS_WIDTH, y);
-            
-            ctx.strokeStyle = '#FF0000';
-            ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CANVAS_WIDTH, y); ctx.stroke();
-            
-            ctx.fillStyle = '#FF0000';
-            ctx.font = '12px monospace';
-            ctx.fillText("DEADLINE PRESSING...", 10, y-10);
-        }
-
-        // Draw Bullets
-        state.bullets.forEach(b => {
-            // Visual Filter for Time Stop
-            if (state.timeStopTimer > 0 && b.isEnemy) {
-                ctx.fillStyle = '#555555'; // Greyed out
-                ctx.globalAlpha = 0.5;
-            } else {
-                ctx.fillStyle = b.color;
-                ctx.globalAlpha = 1;
+        // --- DRAW FUNCTION (Shared logic to allow drawing twice for Lens) ---
+        const drawScene = (mode: 'REALITY' | 'VOID') => {
+            // Draw Boss
+            let bx = state.boss.x;
+            let by = state.boss.y;
+            if (bossShake > 0) {
+                bx += (Math.random()-0.5)*5;
+                by += (Math.random()-0.5)*5;
             }
 
-            // Determine if we have a sprite for this bullet type
-            let spriteKey = null;
-            if (b.type === BulletType.TICKET) spriteKey = 'BULLET_TICKET';
-            else if (b.type === BulletType.CUP) spriteKey = 'BULLET_CUP';
-            else if (b.type === BulletType.SHARD) spriteKey = 'BULLET_SHARD';
-            else if (b.type === BulletType.GLITCH) spriteKey = 'BULLET_GLITCH';
-            else if (b.type === BulletType.AMULET) spriteKey = 'BULLET_OFUDA';
-
-            const sprite = spriteKey ? spriteMapRef.current[spriteKey] : null;
-
-            if (sprite) {
-                const sSize = b.radius * 3; // Scale sprite slightly larger than hit radius
-                ctx.save();
-                ctx.translate(b.x, b.y);
-                ctx.rotate(b.angle + (b.type === BulletType.CUP ? 0 : Math.PI/2)); // Rotate to match direction
-                ctx.drawImage(sprite, -sSize/2, -sSize/2, sSize, sSize);
-                ctx.restore();
+            if (enemySprite) {
+                const size = 96;
+                ctx.drawImage(enemySprite, bx - size/2, by - size/2, size, size);
+                if (mode === 'VOID') {
+                    // Boss looks corrupted in void
+                    ctx.globalCompositeOperation = 'difference';
+                    ctx.drawImage(enemySprite, bx - size/2, by - size/2, size, size);
+                    ctx.globalCompositeOperation = 'source-over';
+                }
             } else {
-                // Fallback / Default Shapes
-                if (b.type === BulletType.TICKET) { 
-                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle); 
-                    ctx.fillRect(-6, -8, 12, 16); 
-                    ctx.fillStyle = 'black'; 
-                    ctx.fillRect(-4, -4, 8, 1); ctx.fillRect(-4, 0, 8, 1); ctx.fillRect(-4, 4, 6, 1);
-                    ctx.restore();
-                } else if (b.type === BulletType.CUP) { 
-                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
-                    ctx.beginPath(); ctx.arc(0, 0, b.radius, 0, Math.PI, false); ctx.fill(); 
-                    ctx.fillRect(-8, -8, 16, 2); 
-                    ctx.strokeStyle = b.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(6, -2, 4, 0, Math.PI*2); ctx.stroke();
-                    ctx.restore();
-                } else if (b.type === BulletType.SHARD) {
-                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
-                    ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4, 4); ctx.lineTo(-4, 4); ctx.fill();
-                    ctx.restore();
-                } else if (b.type === BulletType.ORB) { 
-                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(state.boss.tick * 0.1); 
-                    ctx.beginPath(); ctx.arc(0,0,b.radius, 0, Math.PI*2); ctx.fill();
-                    ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(0,0,b.radius/2, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'red';
+                ctx.beginPath(); ctx.arc(bx, by, 30, 0, Math.PI*2); ctx.fill();
+            }
+
+            // Draw Deadline Wall (Phase 2)
+            if (isReimu && currentPhase === 2 && state.crushingWallY > 0) {
+                const y = state.crushingWallY;
+                const grad = ctx.createLinearGradient(0, y-100, 0, y);
+                grad.addColorStop(0, 'rgba(255,0,0,0)');
+                grad.addColorStop(1, 'rgba(255,0,0,0.6)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, CANVAS_WIDTH, y);
+                
+                ctx.strokeStyle = '#FF0000';
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CANVAS_WIDTH, y); ctx.stroke();
+            }
+
+            // Draw Bullets
+            state.bullets.forEach(b => {
+                // If calculating for Void, only draw if inside lens (approx for performance, clipping handles real cut)
+                // Actually, just draw all, clipping handles it.
+                
+                if (state.timeStopTimer > 0 && b.isEnemy) {
+                    ctx.fillStyle = '#555555'; 
+                    ctx.globalAlpha = 0.5;
+                } else {
+                    ctx.fillStyle = mode === 'VOID' && b.isEnemy ? '#ff0000' : b.color;
+                    ctx.globalAlpha = 1;
+                }
+
+                // Determine if we have a sprite for this bullet type
+                let spriteKey = null;
+                if (b.type === BulletType.TICKET) spriteKey = 'BULLET_TICKET';
+                else if (b.type === BulletType.CUP) spriteKey = 'BULLET_CUP';
+                else if (b.type === BulletType.SHARD) spriteKey = 'BULLET_SHARD';
+                else if (b.type === BulletType.GLITCH) spriteKey = 'BULLET_GLITCH';
+                else if (b.type === BulletType.AMULET) spriteKey = 'BULLET_OFUDA';
+
+                const sprite = spriteKey ? spriteMapRef.current[spriteKey] : null;
+
+                if (sprite) {
+                    const sSize = b.radius * 3; 
+                    ctx.save();
+                    ctx.translate(b.x, b.y);
+                    ctx.rotate(b.angle + (b.type === BulletType.CUP ? 0 : Math.PI/2)); 
+                    ctx.drawImage(sprite, -sSize/2, -sSize/2, sSize, sSize);
                     ctx.restore();
                 } else {
-                    ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); ctx.fill();
+                    // Fallback / Default Shapes
+                    if (b.type === BulletType.TICKET) { 
+                        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle); 
+                        ctx.fillRect(-6, -8, 12, 16); 
+                        ctx.fillStyle = 'black'; 
+                        ctx.fillRect(-4, -4, 8, 1); ctx.fillRect(-4, 0, 8, 1); ctx.fillRect(-4, 4, 6, 1);
+                        ctx.restore();
+                    } else if (b.type === BulletType.CUP) { 
+                        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
+                        ctx.beginPath(); ctx.arc(0, 0, b.radius, 0, Math.PI, false); ctx.fill(); 
+                        ctx.fillRect(-8, -8, 16, 2); 
+                        ctx.strokeStyle = b.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(6, -2, 4, 0, Math.PI*2); ctx.stroke();
+                        ctx.restore();
+                    } else if (b.type === BulletType.SHARD) {
+                        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
+                        ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4, 4); ctx.lineTo(-4, 4); ctx.fill();
+                        ctx.restore();
+                    } else if (b.type === BulletType.ORB) { 
+                        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(state.boss.tick * 0.1); 
+                        ctx.beginPath(); ctx.arc(0,0,b.radius, 0, Math.PI*2); ctx.fill();
+                        ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(0,0,b.radius/2, 0, Math.PI*2); ctx.fill();
+                        ctx.restore();
+                    } else {
+                        ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); ctx.fill();
+                    }
+                }
+            });
+            ctx.globalAlpha = 1;
+
+            // Draw Shockwaves
+            for(let i=state.shockwaves.length-1; i>=0; i--) {
+                const sw = state.shockwaves[i];
+                ctx.beginPath();
+                ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI*2);
+                ctx.strokeStyle = `rgba(255, 255, 255, ${sw.alpha})`;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+
+            // Draw Player & Options
+            if (state.player.iframes % 4 < 2) {
+                // Options
+                state.player.options.forEach(opt => {
+                    const rad = opt.angle * (Math.PI / 180);
+                    const ox = state.player.x + Math.cos(rad) * opt.dist;
+                    const oy = state.player.y + Math.sin(rad) * opt.dist;
+                    
+                    ctx.save();
+                    ctx.translate(ox, oy);
+                    ctx.rotate(state.boss.tick * 0.1);
+                    ctx.fillStyle = opt.color;
+                    ctx.globalAlpha = 0.7;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    ctx.restore();
+                });
+
+                if (playerSprite) {
+                    const pSize = 48; 
+                    ctx.drawImage(playerSprite, state.player.x - pSize/2, state.player.y - pSize/2, pSize, pSize);
+                } else {
+                    ctx.fillStyle = 'blue';
+                    ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 10, 0, Math.PI*2); ctx.fill();
+                }
+                if (state.player.isFocus) {
+                    ctx.fillStyle = '#ff0000';
+                    ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 4, 0, Math.PI*2); ctx.fill();
                 }
             }
-        });
-        ctx.globalAlpha = 1;
-
-        // Draw Shockwaves (Time Stop or Hit)
-        for(let i=state.shockwaves.length-1; i>=0; i--) {
-            const sw = state.shockwaves[i];
-            sw.r += 5;
-            sw.alpha -= 0.05;
-            if(sw.alpha <= 0) { state.shockwaves.splice(i,1); continue; }
-            
-            ctx.beginPath();
-            ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI*2);
-            ctx.strokeStyle = `rgba(255, 255, 255, ${sw.alpha})`;
-            ctx.lineWidth = 3;
-            ctx.stroke();
-
-            // Invert colors inside the shockwave for Time Stop effect
-            if (state.timeStopTimer > 0) {
-                 ctx.fillStyle = `rgba(0, 0, 50, ${sw.alpha * 0.2})`;
-                 ctx.fill();
-            }
         }
 
-        // Draw Player
-        if (state.player.iframes % 4 < 2) {
-            if (playerSprite) {
-                const pSize = 48; 
-                ctx.drawImage(playerSprite, state.player.x - pSize/2, state.player.y - pSize/2, pSize, pSize);
-            } else {
-                ctx.fillStyle = 'blue';
-                ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 10, 0, Math.PI*2); ctx.fill();
-            }
-            if (state.player.isFocus) {
-                ctx.fillStyle = '#ff0000';
-                ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 4, 0, Math.PI*2); ctx.fill();
-            }
+        // 1. Draw REALITY (Base Layer)
+        drawScene('REALITY');
+
+        // 2. Draw LENS (Void Layer with Clip)
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(CANVAS_WIDTH/2, CANVAS_HEIGHT/2, LENS_RADIUS, 0, Math.PI * 2);
+        ctx.clip();
+
+        // Draw Void Background inside Lens
+        const grad = ctx.createRadialGradient(CANVAS_WIDTH/2, CANVAS_HEIGHT/2, 0, CANVAS_WIDTH/2, CANVAS_HEIGHT/2, LENS_RADIUS);
+        grad.addColorStop(0, '#330000');
+        grad.addColorStop(1, '#000000');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        
+        // Draw Scanlines in Void
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+        for(let i=0; i<CANVAS_HEIGHT; i+=4) {
+            ctx.fillRect(CANVAS_WIDTH/2 - LENS_RADIUS, i, LENS_RADIUS*2, 1);
         }
 
-        ctx.restore();
+        drawScene('VOID');
+        
+        // Draw Lens Border
+        ctx.restore(); // Remove clip
+        ctx.beginPath();
+        ctx.arc(CANVAS_WIDTH/2, CANVAS_HEIGHT/2, LENS_RADIUS, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        ctx.restore(); // Restore shake transform
     };
     reqId = requestAnimationFrame(update);
     return () => cancelAnimationFrame(reqId);
-  }, [character, enemy, onDefeat, onVictory, playerSprite, enemySprite, isReimu, bossHp, currentPhase, bossShake, sprites]);
+  }, [character, enemy, onDefeat, onVictory, playerSprite, enemySprite, isReimu, bossHp, currentPhase, bossShake, sprites, isPaused]);
 
   // Format Time: MM:SS:MS
   const formatTime = (ms: number) => {
@@ -663,9 +833,20 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                     <div className="absolute inset-0 border-8 border-white opacity-20"></div>
                 </div>
             )}
+            
+            {/* PAUSE MENU */}
+            {isPaused && (
+                <div className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center backdrop-blur-sm">
+                    <h2 className="text-4xl text-cyan-400 font-mono mb-8 tracking-[0.5em]">PAUSED</h2>
+                    <div className="flex flex-col gap-4">
+                        <button onClick={() => setIsPaused(false)} className="px-8 py-2 border border-cyan-500 text-cyan-500 hover:bg-cyan-500 hover:text-black font-mono">RESUME</button>
+                        <button onClick={onDefeat} className="px-8 py-2 border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-mono">GIVE UP</button>
+                    </div>
+                </div>
+            )}
 
             {/* HUD */}
-            <div className="absolute top-0 left-0 right-0 z-30 p-2 font-mono">
+            <div className="absolute top-0 left-0 right-0 z-30 p-2 font-mono pointer-events-none">
                 <div className="flex justify-between items-end mb-1 px-2">
                     <div className={`text-xl font-bold ${timeLeft < 10000 ? 'text-red-500 animate-pulse' : 'text-cyan-400'}`}>
                         DEADLINE: {formatTime(timeLeft)}
@@ -732,6 +913,14 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                         <span className="text-xs text-gray-400">GRAZE_COUNT</span>
                         <span className="text-xl text-white">{graze}</span>
                     </div>
+                </div>
+                
+                <div className="mt-8">
+                     <div className="text-cyan-800 text-xs mb-1">SYSTEM CONTROLS</div>
+                     <div className="text-xs text-gray-400">ESC - PAUSE</div>
+                     <div className="text-xs text-gray-400">SHIFT - FOCUS</div>
+                     <div className="text-xs text-gray-400">Z - FIRE</div>
+                     <div className="text-xs text-gray-400">X - BOMB</div>
                 </div>
             </div>
 
