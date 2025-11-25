@@ -16,7 +16,7 @@ interface ExplorationProps {
   initialState?: SaveData;
 }
 
-const MOVEMENT_SPEED_MS = 160;
+const MOVE_SPEED_PER_TICK = 0.15; // Progress per 16ms tick (approx 0.15 * 60 = 9 tiles/sec)
 
 const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, onEncounter, onSave, onQuit, propSprites, initialState }) => {
   // Init State from SaveData if available
@@ -27,7 +27,12 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   const [playerGridPos, setPlayerGridPos] = useState(initialState?.playerGridPos || { x: 0, y: 0 });
 
   const [mapData, setMapData] = useState<MapData | null>(null);
+  
+  // Movement State
   const [isMoving, setIsMoving] = useState(false);
+  const [targetGridPos, setTargetGridPos] = useState<{x:number, y:number} | null>(null);
+  const [moveProgress, setMoveProgress] = useState(0); // 0.0 to 1.0
+
   const [direction, setDirection] = useState(1); // 1 = Right, -1 = Left (Flipped)
   const [moveDir, setMoveDir] = useState<'UP'|'DOWN'|'SIDE'>('DOWN'); // For row selection in 3x3 sheet
   
@@ -57,7 +62,8 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       interactionTarget,
       encounterTriggered,
       worldType,
-      devMode
+      devMode,
+      targetGridPos
   });
 
   useEffect(() => {
@@ -69,9 +75,10 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           interactionTarget,
           encounterTriggered,
           worldType,
-          devMode
+          devMode,
+          targetGridPos
       };
-  }, [isPaused, showItemMenu, dialogue, inventory, interactionTarget, encounterTriggered, worldType, devMode]);
+  }, [isPaused, showItemMenu, dialogue, inventory, interactionTarget, encounterTriggered, worldType, devMode, targetGridPos]);
 
   const keysRef = useRef<Record<string, boolean>>({});
 
@@ -199,7 +206,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           if ((e.key === 'z' || e.key === 'Enter')) {
                if (s.dialogue) {
                    handlersRef.current.handleDialogueAdvance();
-               } else if (s.interactionTarget) {
+               } else if (s.interactionTarget && !s.targetGridPos) { // Only interact if stationary
                    handlersRef.current.handleInteraction(s.interactionTarget);
                }
           }
@@ -228,6 +235,16 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       return () => clearInterval(interval);
   }, [isMoving]);
 
+  // Helper to check keys and determine intent
+  const getMoveInput = useCallback(() => {
+      const k = keysRef.current;
+      if (k['ArrowUp'] || k['w']) return { dx: 0, dy: -1, dir: 'UP' as const };
+      if (k['ArrowDown'] || k['s']) return { dx: 0, dy: 1, dir: 'DOWN' as const };
+      if (k['ArrowLeft'] || k['a']) return { dx: -1, dy: 0, dir: 'SIDE' as const, facing: -1 };
+      if (k['ArrowRight'] || k['d']) return { dx: 1, dy: 0, dir: 'SIDE' as const, facing: 1 };
+      return null;
+  }, []);
+
   // --- GAME LOOP ---
   useEffect(() => {
     const loop = setInterval(() => {
@@ -235,6 +252,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
         if (flashOpacity > 0) setFlashOpacity(prev => Math.max(0, prev - 0.1));
 
+        // Sanity Mechanic
         if (worldType === WorldType.INNER_WORLD) {
             if (!devMode) {
                 setSanity(prev => Math.max(0, prev - 0.05)); 
@@ -247,34 +265,68 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             setSanity(prev => Math.min(100, prev + 0.3));
         }
 
-        if (!isMoving) {
-            let dx = 0;
-            let dy = 0;
+        // --- MOVEMENT LOGIC ---
+        let moving = false;
 
-            // Prioritize Axis?
-            if (keysRef.current['ArrowUp'] || keysRef.current['w']) { dy = -1; setMoveDir('UP'); }
-            else if (keysRef.current['ArrowDown'] || keysRef.current['s']) { dy = 1; setMoveDir('DOWN'); }
-            else if (keysRef.current['ArrowLeft'] || keysRef.current['a']) { dx = -1; setDirection(-1); setMoveDir('SIDE'); }
-            else if (keysRef.current['ArrowRight'] || keysRef.current['d']) { dx = 1; setDirection(1); setMoveDir('SIDE'); }
-
-            if (dx !== 0 || dy !== 0) {
-                const nextX = playerGridPos.x + dx;
-                const nextY = playerGridPos.y + dy;
-
+        if (targetGridPos) {
+            // CURRENTLY MOVING
+            moving = true;
+            const nextProgress = moveProgress + (devMode ? 0.4 : MOVE_SPEED_PER_TICK);
+            
+            if (nextProgress >= 1) {
+                // Arrived at destination
+                const finalPos = targetGridPos;
+                setPlayerGridPos(finalPos);
+                
+                checkTriggers(finalPos.x, finalPos.y, mapData);
+                
+                // Immediately check if we should keep moving (Continuous movement)
+                const input = getMoveInput();
+                if (input) {
+                    const nextX = finalPos.x + input.dx;
+                    const nextY = finalPos.y + input.dy;
+                    if (isWalkable(nextX, nextY, mapData, worldType)) {
+                        setTargetGridPos({ x: nextX, y: nextY });
+                        setMoveProgress(0);
+                        setMoveDir(input.dir);
+                        if (input.facing) setDirection(input.facing);
+                    } else {
+                        // Hit wall, stop
+                        setTargetGridPos(null);
+                        setMoveProgress(0);
+                    }
+                } else {
+                    // No input, stop
+                    setTargetGridPos(null);
+                    setMoveProgress(0);
+                }
+            } else {
+                // Continue Interpolation
+                setMoveProgress(nextProgress);
+            }
+        } else {
+            // STATIONARY - Check for start of movement
+            const input = getMoveInput();
+            if (input) {
+                const nextX = playerGridPos.x + input.dx;
+                const nextY = playerGridPos.y + input.dy;
                 if (isWalkable(nextX, nextY, mapData, worldType)) {
-                    setIsMoving(true);
-                    setPlayerGridPos({ x: nextX, y: nextY });
-                    checkTriggers(nextX, nextY, mapData);
-                    setTimeout(() => setIsMoving(false), devMode ? 50 : MOVEMENT_SPEED_MS); 
+                    setTargetGridPos({ x: nextX, y: nextY });
+                    setMoveProgress(0);
+                    setMoveDir(input.dir);
+                    if (input.facing) setDirection(input.facing);
+                    moving = true;
                 }
             }
         }
-        updateInteractionTarget(playerGridPos, mapData, worldType);
+
+        setIsMoving(moving || targetGridPos !== null);
+        updateInteractionTarget(targetGridPos || playerGridPos, mapData, worldType);
 
     }, 16);
 
     return () => clearInterval(loop);
-  }, [mapData, playerGridPos, worldType, dialogue, interactionTarget, sanity, flashOpacity, isMoving, inventory, encounterTriggered, devMode, isPaused]);
+  }, [mapData, playerGridPos, targetGridPos, moveProgress, worldType, dialogue, interactionTarget, sanity, flashOpacity, inventory, encounterTriggered, devMode, isPaused, getMoveInput]);
 
   const isWalkable = (x: number, y: number, data: MapData, world: WorldType) => {
       if (x < 0 || x >= data.width || y < 0 || y >= data.height) return false;
@@ -303,7 +355,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           if (trigger.condition && !trigger.condition(flags)) return;
           if (trigger.type === 'TELEPORT' && trigger.targetX !== undefined) {
               setTimeout(() => {
+                  // Teleport Logic
                   setPlayerGridPos({ x: trigger.targetX!, y: trigger.targetY || y });
+                  setTargetGridPos(null); // Cancel any movement state
+                  setMoveProgress(0);
+                  
                   if (trigger.flashEffect) setFlashOpacity(1);
                   if (trigger.message) {
                       setLoopMessage(trigger.message);
@@ -330,20 +386,38 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       setInteractionTarget(nearest);
   };
 
+  // --- RENDER HELPERS ---
+  const getVisualPosition = () => {
+      if (targetGridPos) {
+          const x = playerGridPos.x * TILE_SIZE * (1 - moveProgress) + targetGridPos.x * TILE_SIZE * moveProgress;
+          const y = playerGridPos.y * TILE_SIZE * (1 - moveProgress) + targetGridPos.y * TILE_SIZE * moveProgress;
+          return { x, y };
+      }
+      return { x: playerGridPos.x * TILE_SIZE, y: playerGridPos.y * TILE_SIZE };
+  };
+
+  const visualPos = getVisualPosition();
+
   const getCameraOffset = () => {
       if (!mapData) return { x: 0, y: 0 };
-      const cx = playerGridPos.x * TILE_SIZE - window.innerWidth / 2;
-      const cy = playerGridPos.y * TILE_SIZE - window.innerHeight / 2;
+      const cx = visualPos.x + (TILE_SIZE / 2) - window.innerWidth / 2;
+      const cy = visualPos.y + (TILE_SIZE / 2) - window.innerHeight / 2;
+      
       let tx = -cx;
       let ty = -cy;
+      
       const minX = -(mapData.width * TILE_SIZE - window.innerWidth);
       const minY = -(mapData.height * TILE_SIZE - window.innerHeight);
+      
       if (mapData.width * TILE_SIZE < window.innerWidth) tx = (window.innerWidth - mapData.width * TILE_SIZE) / 2;
       else tx = Math.max(minX, Math.min(0, tx));
+      
       if (mapData.height * TILE_SIZE < window.innerHeight) ty = (window.innerHeight - mapData.height * TILE_SIZE) / 2;
       else ty = Math.max(minY, Math.min(0, ty));
+      
       return { x: tx, y: ty };
   };
+  
   const camera = getCameraOffset();
 
   if (!mapData) return <div>Loading...</div>;
@@ -400,13 +474,13 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black font-serif outline-none" tabIndex={0}>
-        <div className="will-change-transform transition-transform duration-300 ease-out" style={{ transform: `translate3d(${camera.x}px, ${camera.y}px, 0)` }}>
+        <div className="will-change-transform" style={{ transform: `translate3d(${camera.x}px, ${camera.y}px, 0)` }}>
             {character.id === CharacterId.KAGUYA ? (
                  <Stage1Eientei mapData={mapData} worldType={worldType} propSprites={propSprites} />
             ) : (
                  <Stage1Bamboo mapData={mapData} worldType={worldType} propSprites={propSprites} />
             )}
-            <div className="absolute z-30" style={{ left: (playerGridPos.x * TILE_SIZE), top: (playerGridPos.y * TILE_SIZE) - (TILE_SIZE * 0.5), width: TILE_SIZE, height: TILE_SIZE, transition: `left ${devMode ? 50 : MOVEMENT_SPEED_MS}ms linear, top ${devMode ? 50 : MOVEMENT_SPEED_MS}ms linear` }}>
+            <div className="absolute z-30" style={{ left: visualPos.x, top: visualPos.y, width: TILE_SIZE, height: TILE_SIZE }}>
                 {renderPlayerSprite()}
             </div>
         </div>
@@ -493,7 +567,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                 <div className="mt-2 text-[10px] text-gray-500 text-right">[TAB] PAUSE / MENU</div>
             </div>
         </div>
-        {interactionTarget && !dialogue && !isPaused && (
+        {interactionTarget && !dialogue && !isPaused && !targetGridPos && (
             <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 animate-bounce pointer-events-none">
                 <div className="bg-white text-black px-6 py-2 font-bold rounded-full shadow-[0_0_20px_white] flex items-center gap-2 cursor-pointer"><span>⚡</span> Z / ENTER</div>
             </div>
