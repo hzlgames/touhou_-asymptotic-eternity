@@ -54,10 +54,14 @@ const App: React.FC = () => {
     // 1. Try Local FS first
     if (hasFsAccess) {
         const fsUrl = await loadAssetFromFS(id, type);
-        if (fsUrl) return { url: fsUrl, isLocal: true };
+        if (fsUrl) {
+            console.log(`[App] Loaded local asset: ${name}`);
+            return { url: fsUrl, isLocal: true };
+        }
     }
     
     // 2. Generate with Timeout (15s max)
+    console.log(`[App] Generating asset: ${name}`);
     const result = await withTimeout(
         getOrGenerateAsset(id, name, desc, type, visualPrompt),
         15000, 
@@ -67,12 +71,16 @@ const App: React.FC = () => {
     // 3. Save if successful and FS connected
     if (result && !result.isLocal && hasFsAccess) {
         try {
-            // Don't block UI for saving, do it in background
-            saveAssetToFS(id, type, result.url).then(success => {
-                if (success) console.log(`[App] Background saved ${name}`);
-            });
+            setLoadingStatus(`Saving ${name} to disk...`);
+            // CRITICAL: Await the save to ensure it writes before we move on
+            await saveAssetToFS(id, type, result.url);
+            console.log(`[App] Successfully saved ${name} to FS`);
             return { url: result.url, isLocal: true };
-        } catch (e) { console.error("Auto-save failed", e); }
+        } catch (e) { 
+            console.error(`[App] Auto-save failed for ${name}:`, e);
+            // Return the memory URL anyway so the game continues
+            return { url: result.url, isLocal: false };
+        }
     }
     return result;
   };
@@ -171,7 +179,12 @@ const App: React.FC = () => {
           const sprite = await fetchAsset(enemy.name, enemy.name, enemy.description, 'sprite', enemy.visualPrompt);
           if (sprite) updateAssetRecord(enemy.name, 'sprite', sprite);
 
-          // 2. Background
+          // 2. Portrait (NEW)
+          setLoadingStatus(`Visualizing Entity: ${enemy.name}...`);
+          const portrait = await fetchAsset(enemy.name, enemy.name, enemy.description, 'portrait', enemy.visualPrompt);
+          if (portrait) updateAssetRecord(enemy.name, 'portrait', portrait);
+
+          // 3. Background
           // If it's Stage 1 Reimu, use the special Boss BG we preloaded or fetch it now
           if (enemy.name.includes("Reimu")) {
                if (!loadedAssets.backgrounds['STAGE1_BOSS_BG']) {
@@ -250,7 +263,7 @@ const App: React.FC = () => {
       if (!activeEnemy) return null;
       let bgUrl = loadedAssets.backgrounds[activeEnemy.name]?.url || '';
       
-      // Override for Reimu
+      // Override for Reimu BG
       if (activeEnemy.name.includes('Reimu') && loadedAssets.backgrounds['STAGE1_BOSS_BG']) {
           bgUrl = loadedAssets.backgrounds['STAGE1_BOSS_BG'].url;
       } else if (!bgUrl && loadedAssets.backgrounds[`${activeEnemy.name}_BG`]) {
@@ -260,7 +273,8 @@ const App: React.FC = () => {
       return {
           ...activeEnemy,
           pixelSpriteUrl: loadedAssets.enemySprites[activeEnemy.name]?.url || FALLBACK_SPRITE,
-          backgroundUrl: bgUrl
+          backgroundUrl: bgUrl,
+          portraitUrl: loadedAssets.portraits[activeEnemy.name]?.url // Pass the enemy portrait
       };
   };
 
@@ -303,7 +317,7 @@ const App: React.FC = () => {
                     {!hasFsAccess ? (
                         <button 
                             onClick={handleFileSystemConnect}
-                            className="border border-[#FFD700] text-[#FFD700] hover:bg-[#FFD700] hover:text-black px-8 py-2 font-mono text-xs tracking-widest transition-all duration-300"
+                            className="border border-[#FFD700] text-[#FFD700] hover:bg-[#FFD700] hover:text-black px-8 py-2 font-mono text-xs tracking-widest transition-all duration-300 shadow-[0_0_15px_rgba(255,215,0,0.3)]"
                         >
                             [ INITIALIZE LOCAL STORAGE ]
                         </button>

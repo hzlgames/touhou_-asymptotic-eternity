@@ -112,7 +112,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
       });
 
       // PHASE 1: "Efficient Correction" (Non-Spell)
-      // Homing Amulets + Reflective Orbs
+      // Homing Amulets + Reflective Yin-Yang orbs
       if (phase === 1) {
           // Homing Amulets
           if (tick % 60 === 0) {
@@ -220,7 +220,6 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
              else if (hpPercent < PHASE_THRESHOLDS[1]) { newPhase = 3; pName = 'Deadline "The Crushing Wall"'; }
              else if (hpPercent < PHASE_THRESHOLDS[0]) { newPhase = 2; pName = 'Labor Sign "Infinite Paperwork Avalanche"'; }
         } else {
-            // Default simple phases for other enemies
              if (hpPercent < 0.5) newPhase = 2;
              pName = enemy.spellCardName;
         }
@@ -585,10 +584,20 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
             </div>
 
             {/* SPELL CARD CUT-IN */}
-            <div className={`absolute top-24 right-0 z-40 pointer-events-none transition-all duration-500 transform ${showCutIn ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}`}>
-                 <div className="bg-black/80 border-l-4 border-cyan-500 py-2 px-8 text-right shadow-[0_0_20px_cyan]">
-                     <h3 className="text-cyan-400 font-mono text-lg font-bold glitch-text">{phaseName}</h3>
-                     <p className="text-[10px] text-gray-400 font-mono uppercase tracking-wider">System Alert: High CPU Usage</p>
+            <div className={`absolute top-24 right-0 z-40 pointer-events-none transition-all duration-500 transform flex flex-col items-end ${showCutIn ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}`}>
+                 <div className="relative">
+                    {/* Enemy Portrait Cut-in */}
+                    {enemy.portraitUrl && (
+                        <div className="w-[300px] h-[300px] absolute -right-10 -top-10 z-0 overflow-hidden mask-image-gradient">
+                            <img src={enemy.portraitUrl} className="w-full h-full object-cover opacity-80" alt="Cut In" />
+                            <div className="absolute inset-0 bg-gradient-to-l from-transparent to-black/80"></div>
+                        </div>
+                    )}
+                    
+                    <div className="bg-black/90 border-l-4 border-cyan-500 py-4 px-12 text-right shadow-[0_0_20px_cyan] relative z-10">
+                        <h3 className="text-cyan-400 font-mono text-xl font-bold glitch-text">{phaseName}</h3>
+                        <p className="text-[10px] text-gray-400 font-mono uppercase tracking-wider mt-1">System Alert: High CPU Usage</p>
+                    </div>
                  </div>
             </div>
 

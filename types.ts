@@ -37,6 +37,7 @@ export interface Enemy {
   difficulty: number; 
   pixelSpriteUrl: string;
   backgroundUrl: string;
+  portraitUrl?: string; // New field for Boss Tachie
 }
 
 export interface Scenario {

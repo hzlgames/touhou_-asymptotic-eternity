@@ -99,7 +99,10 @@ export const loadAssetFromFS = async (id: string, type: AssetType): Promise<stri
  */
 export const saveAssetToFS = async (id: string, type: AssetType, dataUrl: string): Promise<boolean> => {
     const dir = getDirHandleForType(type);
-    if (!dir) return false;
+    if (!dir) {
+        console.warn("Cannot save asset: FS not connected or Directory not found.");
+        return false;
+    }
 
     try {
         const filename = getFilename(id);
@@ -113,10 +116,11 @@ export const saveAssetToFS = async (id: string, type: AssetType, dataUrl: string
         await writable.write(blob);
         await writable.close();
         
+        console.log(`[FS] Saved ${filename} successfully.`);
         return true;
     } catch (e) {
         console.error("Failed to write file:", e);
-        return false;
+        throw e; // Re-throw to handle in App.tsx
     }
 };
 
