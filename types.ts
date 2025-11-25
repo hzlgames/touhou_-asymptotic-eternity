@@ -56,7 +56,12 @@ export enum BulletType {
   ORB = 'ORB',        
   BIG = 'BIG',        
   KNIFE = 'KNIFE',    
-  STAR = 'STAR'       
+  STAR = 'STAR',
+  // New Types for Bosses
+  AMULET = 'AMULET',
+  PAPER = 'PAPER',
+  LASER_V = 'LASER_V',
+  GLITCH = 'GLITCH'
 }
 
 export interface Bullet {
@@ -76,6 +81,13 @@ export interface Bullet {
   isEnemy: boolean;
   id: number;
   grazed: boolean;    
+
+  // New Mechanics
+  maxReflections?: number; // How many times it can bounce off walls
+  delay?: number; // Ticks before moving
+  homing?: boolean;
+  targetX?: number;
+  targetY?: number;
 }
 
 export interface Particle {

@@ -166,6 +166,18 @@ const App: React.FC = () => {
             'Character on transparent background. Pixel art Reimu Hakurei sitting at a desk, typing furiously on a mechanical keyboard. She looks exhausted, bags under eyes. Anime RPG style top-down. Transparent background.'
         );
         if (reimuWork) updateAssetRecord('PROP_REIMU_WORK', 'sprite', reimuWork);
+        
+        // 7. Boss Tunnel Background
+        setLoadingStatus("Generating Admin Tunnel...");
+        const bossBg = await fetchAsset(
+            'STAGE1_BOSS_BG',
+            'Bureaucratic Tunnel',
+            'A scrolling tunnel of paperwork.',
+            'background',
+            'Anime background art. A futuristic cyber-tunnel lined with millions of flying papers, red "ERROR" windows, and glowing fiber optic cables. High speed motion blur. Dark blue and red color scheme. Oppressive atmosphere.'
+        );
+        if (bossBg) updateAssetRecord('STAGE1_BOSS_BG', 'background', bossBg);
+
     } else if (charId === CharacterId.MOKOU) {
          setLoadingStatus("Generating Bamboo Nightmare...");
 
@@ -198,9 +210,22 @@ const App: React.FC = () => {
       const sprite = await fetchAsset(enemy.name, enemy.name, enemy.description, 'sprite', enemy.visualPrompt);
       if (sprite) updateAssetRecord(enemy.name, 'sprite', sprite);
 
-      const bgPrompt = enemy.visualPrompt ? `${enemy.visualPrompt} (Atmospheric Background)` : enemy.description;
-      const bg = await fetchAsset(`${enemy.name}_BG`, `${enemy.name} Location`, bgPrompt, 'background', bgPrompt);
-      if (bg) updateAssetRecord(`${enemy.name}_BG`, 'background', bg);
+      // If it's Stage 1 Reimu, use the special Boss BG we preloaded
+      if (enemy.name.includes("Reimu")) {
+           // Should already be in loadedAssets from loadCharacterAssets if Kaguya
+           // But if it's dynamic encounter, we check
+           if (!loadedAssets.backgrounds['STAGE1_BOSS_BG']) {
+                const bg = await fetchAsset(
+                    'STAGE1_BOSS_BG', 'Bureaucratic Tunnel', 'Tunnel of paperwork', 'background',
+                    'Anime background art. A futuristic cyber-tunnel lined with millions of flying papers, red "ERROR" windows, and glowing fiber optic cables. High speed motion blur.'
+                );
+                if (bg) updateAssetRecord('STAGE1_BOSS_BG', 'background', bg);
+           }
+      } else {
+          const bgPrompt = enemy.visualPrompt ? `${enemy.visualPrompt} (Atmospheric Background)` : enemy.description;
+          const bg = await fetchAsset(`${enemy.name}_BG`, `${enemy.name} Location`, bgPrompt, 'background', bgPrompt);
+          if (bg) updateAssetRecord(`${enemy.name}_BG`, 'background', bg);
+      }
       setLoadingStatus(null);
   };
 
@@ -221,22 +246,26 @@ const App: React.FC = () => {
     
     let propsLoaded = true;
     if (id === CharacterId.KAGUYA) {
+        // Strict check for ALL props to force generation
         propsLoaded = !!(
             loadedAssets.props['PROP_ASSET_TREE'] && 
-            loadedAssets.props['PROP_GOHEI'] &&
+            loadedAssets.props['PROP_GOHEI'] && 
             loadedAssets.props['PROP_DIGITAL_TORII'] &&
             loadedAssets.props['PROP_SHRINE_OFFICE'] &&
-            loadedAssets.props['PROP_SHREDDER'] && 
-            loadedAssets.props['PROP_REIMU_WORK']
+            loadedAssets.props['PROP_SHREDDER'] &&
+            loadedAssets.props['PROP_REIMU_WORK'] &&
+            loadedAssets.backgrounds['STAGE1_BOSS_BG'] // Ensure boss BG is ready
         );
     } else if (id === CharacterId.MOKOU) {
-        propsLoaded = !!(
+         propsLoaded = !!(
             loadedAssets.props['PROP_BAMBOO_TREE'] &&
             loadedAssets.props['PROP_MARISA_SAD']
         );
     }
+    const isReady = basicAssetsLoaded && propsLoaded;
 
-    if (!basicAssetsLoaded || !propsLoaded) {
+    // ... (rest of function same as before, simplified logic for update)
+    if (!isReady) {
         await loadCharacterAssets(id);
     }
     setGameState(GameState.EXPLORATION);
@@ -263,10 +292,16 @@ const App: React.FC = () => {
 
   const getCurrentEnemy = (): Enemy | null => {
       if (!activeEnemy) return null;
+      // Special override for Reimu BG
+      let bgUrl = loadedAssets.backgrounds[activeEnemy.name]?.url || '';
+      if (activeEnemy.name.includes('Reimu') && loadedAssets.backgrounds['STAGE1_BOSS_BG']) {
+          bgUrl = loadedAssets.backgrounds['STAGE1_BOSS_BG'].url;
+      }
+
       return {
           ...activeEnemy,
           pixelSpriteUrl: loadedAssets.enemySprites[activeEnemy.name]?.url || FALLBACK_SPRITE,
-          backgroundUrl: loadedAssets.backgrounds[activeEnemy.name]?.url || ''
+          backgroundUrl: bgUrl
       };
   };
 
@@ -333,14 +368,14 @@ const App: React.FC = () => {
                     const basicReady = loadedAssets.sprites[char.id] && loadedAssets.portraits[char.id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
                     let propsReady = true;
                     if (isKaguya) {
-                        // Strict check for ALL props to force generation
                         propsReady = !!(
                             loadedAssets.props['PROP_ASSET_TREE'] && 
                             loadedAssets.props['PROP_GOHEI'] && 
                             loadedAssets.props['PROP_DIGITAL_TORII'] &&
                             loadedAssets.props['PROP_SHRINE_OFFICE'] &&
                             loadedAssets.props['PROP_SHREDDER'] &&
-                            loadedAssets.props['PROP_REIMU_WORK']
+                            loadedAssets.props['PROP_REIMU_WORK'] &&
+                            loadedAssets.backgrounds['STAGE1_BOSS_BG']
                         );
                     } else if (char.id === CharacterId.MOKOU) {
                          propsReady = !!(
