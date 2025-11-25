@@ -43,6 +43,34 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   // Debounce encounter trigger
   const [encounterTriggered, setEncounterTriggered] = useState(false);
 
+  // --- REFS FOR STABLE INPUT HANDLING ---
+  // We use refs to access the latest state inside the 'keydown' listener without re-binding it.
+  const stateRef = useRef({
+      isPaused,
+      showItemMenu,
+      dialogue,
+      inventory,
+      interactionTarget,
+      encounterTriggered,
+      worldType,
+      devMode
+  });
+
+  useEffect(() => {
+      stateRef.current = {
+          isPaused,
+          showItemMenu,
+          dialogue,
+          inventory,
+          interactionTarget,
+          encounterTriggered,
+          worldType,
+          devMode
+      };
+  }, [isPaused, showItemMenu, dialogue, inventory, interactionTarget, encounterTriggered, worldType, devMode]);
+
+  const keysRef = useRef<Record<string, boolean>>({});
+
   const handleReimuEncounter = useCallback(() => {
      setDialogue({
          title: "Administrator Reimu",
@@ -65,6 +93,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       }
   }, [flags, inventory, handleReimuEncounter, handleMarisaEncounter, worldType, character.id]);
 
+  // Load Map Data
   useEffect(() => {
     const data = loadMap();
     setMapData(data);
@@ -73,8 +102,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         setPlayerGridPos(data.spawnPoint);
     }
   }, [loadMap]); // Dependent on map loaders
-
-  const keysRef = useRef<Record<string, boolean>>({});
 
   // Helper to create current state snapshot
   const createSnapshot = (): SaveData => ({
@@ -87,38 +114,44 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       timestamp: Date.now()
   });
 
-  // --- INPUT HANDLING ---
+  // --- STABLE INPUT HANDLING ---
   useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
           keysRef.current[e.key] = true;
-          
+          const s = stateRef.current;
+
+          // ESC Handling
           if (e.key === 'Escape') {
-              if (showItemMenu) {
+              e.preventDefault(); // CRITICAL: Stop browser defaults
+              e.stopPropagation();
+
+              if (s.showItemMenu) {
                   setShowItemMenu(false);
               } else {
+                  // Toggle Pause
                   setIsPaused(prev => !prev);
               }
-              return; // Consume Escape
+              return;
           }
 
-          if (isPaused) return; // Block other inputs
+          if (s.isPaused) return; // Block other inputs if paused
           
           if (e.key === 'F9') setDevMode(prev => !prev);
           
-          if ((e.code === 'Space' || e.key === ' ') && !dialogue) {
-              if (inventory.has('Obscure Lens')) {
+          if ((e.code === 'Space' || e.key === ' ') && !s.dialogue) {
+              if (s.inventory.has('Obscure Lens')) {
                   setWorldType(prev => prev === WorldType.REALITY ? WorldType.INNER_WORLD : WorldType.REALITY);
               } else {
                   setDialogue({ title: "System Restriction", text: "You sense a hidden layer to reality, but your naked eyes cannot perceive the 'Inner World'. You need a catalyst." });
               }
           }
           
-          if ((e.key === 'z' || e.key === 'Enter') && !dialogue && interactionTarget) {
-              handleInteraction(interactionTarget);
-          }
-          
-          if ((e.key === 'z' || e.key === 'Enter') && dialogue) {
-              handleDialogueAdvance();
+          if ((e.key === 'z' || e.key === 'Enter')) {
+               if (s.dialogue) {
+                   handleDialogueAdvance();
+               } else if (s.interactionTarget) {
+                   handleInteraction(s.interactionTarget);
+               }
           }
       };
 
@@ -131,7 +164,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           window.removeEventListener('keydown', handleKeyDown);
           window.removeEventListener('keyup', handleKeyUp);
       };
-  }, [isPaused, showItemMenu, dialogue, interactionTarget, inventory, encounterTriggered]); // Isolated dependencies for Input
+  }, []); // EMPTY DEPENDENCY ARRAY ensures listeners are never re-bound
 
   const handleDialogueAdvance = () => {
     if (!dialogue) return;
@@ -304,7 +337,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   if (!mapData) return <div>Loading...</div>;
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-black font-serif">
+    <div className="relative w-full h-screen overflow-hidden bg-black font-serif outline-none" tabIndex={0}>
         <div className="will-change-transform transition-transform duration-300 ease-out" style={{ transform: `translate3d(${camera.x}px, ${camera.y}px, 0)` }}>
             {character.id === CharacterId.KAGUYA ? (
                  <Stage1Eientei mapData={mapData} worldType={worldType} propSprites={propSprites} />
@@ -319,7 +352,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         </div>
         
         {/* HUD */}
-        <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
+        <div className="absolute top-4 left-4 z-50 flex flex-col gap-2 pointer-events-none">
             <h1 className="text-xl text-white bg-black/60 px-4 py-2 border-l-4 border-blue-500 font-mono">
                 {character.id === CharacterId.KAGUYA ? "SECTOR 1: PROCESSING LANE" : "SECTOR 1: DECAYING FOREST"}
             </h1>
@@ -381,11 +414,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         )}
 
         {loopMessage && (
-            <div className="absolute top-32 left-1/2 -translate-x-1/2 z-50 animate-pulse">
+            <div className="absolute top-32 left-1/2 -translate-x-1/2 z-50 animate-pulse pointer-events-none">
                 <div className="bg-red-900/80 border-y-2 border-[#FFD700] text-[#FFD700] px-8 py-2 font-bold tracking-[0.5em] shadow-[0_0_20px_red] font-mono">{loopMessage}</div>
             </div>
         )}
-        <div className="absolute top-4 right-4 z-50">
+        <div className="absolute top-4 right-4 z-50 pointer-events-none">
             <div className="bg-black/80 border border-[#FFD700] p-3 rounded text-white min-w-[200px]">
                 <h3 className="text-[#FFD700] text-xs font-bold uppercase tracking-widest mb-1 border-b border-gray-700 pb-1">Current Protocol</h3>
                 <p className="text-sm font-mono text-green-400">{mapData.objectiveText}</p>
@@ -401,13 +434,13 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             </div>
         </div>
         {interactionTarget && !dialogue && !isPaused && (
-            <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 animate-bounce">
+            <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 animate-bounce pointer-events-none">
                 <div className="bg-white text-black px-6 py-2 font-bold rounded-full shadow-[0_0_20px_white] flex items-center gap-2"><span>⚡</span> Z / ENTER</div>
             </div>
         )}
         {dialogue && (
-            <div className="absolute inset-x-0 bottom-0 min-h-[250px] bg-gradient-to-t from-black via-black/95 to-transparent z-[60] flex flex-col items-center justify-end pb-10">
-                <div className="w-full max-w-4xl bg-[#1a0505] border-t-2 border-[#FFD700] p-6 shadow-2xl animate-slide-up flex gap-6">
+            <div className="absolute inset-x-0 bottom-0 min-h-[250px] bg-gradient-to-t from-black via-black/95 to-transparent z-[60] flex flex-col items-center justify-end pb-10 pointer-events-none">
+                <div className="w-full max-w-4xl bg-[#1a0505] border-t-2 border-[#FFD700] p-6 shadow-2xl animate-slide-up flex gap-6 pointer-events-auto">
                     <div className="w-32 h-32 bg-black border border-white shrink-0 overflow-hidden relative">
                          <img src={character.portraitUrl} className="w-full h-full object-cover" alt="Portrait" />
                     </div>
