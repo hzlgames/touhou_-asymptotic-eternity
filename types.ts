@@ -62,7 +62,12 @@ export enum BulletType {
   AMULET = 'AMULET',
   PAPER = 'PAPER',
   LASER_V = 'LASER_V',
-  GLITCH = 'GLITCH'
+  GLITCH = 'GLITCH',
+  
+  // Reimu Specific
+  TICKET = 'TICKET', // Square "A4 Paper" / Invoice
+  CUP = 'CUP',       // Tea cup
+  SHARD = 'SHARD'    // Broken ceramic
 }
 
 export interface Bullet {
@@ -89,6 +94,9 @@ export interface Bullet {
   homing?: boolean;
   targetX?: number;
   targetY?: number;
+  
+  // Custom timer for exploding bullets
+  timer?: number;
 }
 
 export interface Particle {

@@ -27,7 +27,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
   const [playerHp, setPlayerHp] = useState(3);
   const [score, setScore] = useState(0);
   const [graze, setGraze] = useState(0);
-  const [bombs, setBombs] = useState(2);
+  const [bombs, setBombs] = useState(3); // Start with 3 bombs
   
   // Phase Management
   const [currentPhase, setCurrentPhase] = useState(1);
@@ -38,6 +38,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
   const [showCutIn, setShowCutIn] = useState(true);
   const [isGlitching, setIsGlitching] = useState(false);
   const [bossShake, setBossShake] = useState(0);
+  const [timeStopActive, setTimeStopActive] = useState(false);
 
   const [playerSprite, setPlayerSprite] = useState<HTMLImageElement | null>(null);
   const [enemySprite, setEnemySprite] = useState<HTMLImageElement | null>(null);
@@ -50,8 +51,9 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
     particles: [] as Particle[],
     shockwaves: [] as Shockwave[],
     keys: {} as Record<string, boolean>,
-    boss: { x: CANVAS_WIDTH / 2, y: 120, targetX: CANVAS_WIDTH / 2, targetY: 120, tick: 0, angle: 0, cooldown: 0 },
+    boss: { x: CANVAS_WIDTH / 2, y: 100, targetX: CANVAS_WIDTH / 2, targetY: 100, tick: 0, angle: 0, cooldown: 0 },
     crushingWallY: 0,
+    timeStopTimer: 0,
     isRunning: true,
     gameActive: false
   });
@@ -81,7 +83,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
     setShowCutIn(true);
     
     // Initial Phase Name
-    setPhaseName(isReimu ? "System Check: Integrity Scan" : enemy.spellCardName);
+    setPhaseName(isReimu ? 'Labor Sign "Overtime Yin-Yang Orbs"' : enemy.spellCardName);
 
     const timer = setTimeout(() => {
         setShowCutIn(false);
@@ -91,8 +93,20 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
   }, [character, enemy, isReimu]);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => { stateRef.current.keys[e.key] = true; };
-    const handleKeyUp = (e: KeyboardEvent) => { stateRef.current.keys[e.key] = false; };
+    const handleKeyDown = (e: KeyboardEvent) => { 
+        stateRef.current.keys[e.key] = true; 
+        
+        // BOMB TRIGGER (Kaguya: Time Stagnation)
+        if ((e.key === 'x' || e.key === 'X') && stateRef.current.gameActive && !stateRef.current.keys['x_held']) {
+             stateRef.current.keys['x_held'] = true;
+             triggerBomb();
+        }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => { 
+        stateRef.current.keys[e.key] = false; 
+        if (e.key === 'x' || e.key === 'X') stateRef.current.keys['x_held'] = false;
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
@@ -102,88 +116,123 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
     };
   }, []);
 
-  // --- REIMU BOSS PATTERNS ---
+  const triggerBomb = () => {
+      if (bombs > 0 && stateRef.current.timeStopTimer <= 0) {
+          setBombs(prev => prev - 1);
+          // Visual Effect
+          stateRef.current.shockwaves.push({ x: stateRef.current.player.x, y: stateRef.current.player.y, r: 10, alpha: 1 });
+          // Kaguya Logic: Time Stop
+          stateRef.current.timeStopTimer = 300; // 5 seconds of freeze
+          setTimeStopActive(true);
+          stateRef.current.player.iframes = 300; // Invuln during stop
+      }
+  };
+
+  // --- REIMU BOSS PATTERNS (DESIGN DOC COMPLIANT) ---
   const spawnReimuPattern = (tick: number, bx: number, by: number, phase: number, playerX: number, playerY: number) => {
       const bullets: Bullet[] = [];
       const createBullet = (props: Partial<Bullet>): Bullet => ({
-          x: bx, y: by, speed: 3, angle: Math.PI/2, accel: 0, angularVelocity: 0,
+          x: bx, y: by, speed: 2, angle: Math.PI/2, accel: 0, angularVelocity: 0,
           radius: 4, type: BulletType.ORB, color: 'white', isEnemy: true, id: Math.random(), grazed: false,
           maxReflections: 0, ...props
       });
 
-      // PHASE 1: "Efficient Correction" (Non-Spell)
-      // Homing Amulets + Reflective Yin-Yang orbs
+      // PHASE 1: 'Labor Sign "Overtime Yin-Yang Orbs"'
+      // Visual: Photocopier scanner effect. Reimu moves rigidly left/right.
+      // Action: Fires dense straight lines of Yin-Yang orbs downwards. Rigid, no beauty.
       if (phase === 1) {
-          // Homing Amulets
-          if (tick % 60 === 0) {
-             for (let i = -2; i <= 2; i++) {
-                 if (i===0) continue;
-                 bullets.push(createBullet({
-                     x: bx + i * 20, y: by, speed: 0.1, accel: 0.1, angle: Math.PI / 2,
-                     type: BulletType.AMULET, color: '#FF4444', homing: true, delay: 30, radius: 3
-                 }));
-             }
-          }
-          // Reflective Yin-Yang Orbs (Bounce off walls)
-          if (tick % 90 === 0) {
-              bullets.push(createBullet({ angle: Math.PI * 0.75, speed: 4, type: BulletType.ORB, color: '#FFFFFF', radius: 10, maxReflections: 1 }));
-              bullets.push(createBullet({ angle: Math.PI * 0.25, speed: 4, type: BulletType.ORB, color: '#FFFFFF', radius: 10, maxReflections: 1 }));
-          }
-      }
-      
-      // PHASE 2: "Infinite Paperwork Avalanche"
-      // Falling papers from top corners
-      else if (phase === 2) {
-          if (tick % 4 === 0) {
-              // Left Source
-              bullets.push(createBullet({ 
-                  x: Math.random() * 50, y: 0, 
-                  speed: 2 + Math.random(), angle: Math.PI / 2, 
-                  type: BulletType.PAPER, color: '#EEEEEE', accel: 0.05 
-              }));
-              // Right Source
-              bullets.push(createBullet({ 
-                  x: CANVAS_WIDTH - Math.random() * 50, y: 0, 
-                  speed: 2 + Math.random(), angle: Math.PI / 2, 
-                  type: BulletType.PAPER, color: '#FFaaaa', accel: 0.05 
-              }));
-          }
-      }
-      
-      // PHASE 3: "The Crushing Wall"
-      // Deadline Beam moves down + Vertical Lasers
-      else if (phase === 3) {
-          if (tick % 15 === 0) {
-              // Fast vertical lasers
+          // Rapid fire scanner lines
+          if (tick % 6 === 0) {
+              // Main Scanner Beam
               bullets.push(createBullet({ 
                   x: bx, y: by + 20, 
-                  speed: 9, angle: Math.PI / 2, 
-                  type: BulletType.LASER_V, color: '#FF0000', radius: 4 
+                  speed: 3.5, angle: Math.PI / 2, 
+                  type: BulletType.ORB, color: '#FF4444', radius: 8 
+              }));
+              
+              // "Residual" Image (Leftovers from the scan)
+              if (Math.random() > 0.5) {
+                   bullets.push(createBullet({
+                       x: bx + (Math.random() - 0.5) * 40,
+                       y: by,
+                       speed: 1.5, // Slow
+                       angle: Math.PI / 2 + (Math.random() - 0.5) * 0.1,
+                       type: BulletType.TICKET, // "Paperwork"
+                       color: '#cccccc',
+                       radius: 3
+                   }));
+              }
+          }
+      }
+      
+      // PHASE 2: 'Urgent Task "Deadline Pressure"'
+      // Visual: Giant Red Laser Bar descending. 
+      // Action: Player space shrinks. "Invoice" bullets rain down from the bar.
+      else if (phase === 2) {
+          // The bar logic is handled in the main update loop (crushingWallY)
+          const wallY = stateRef.current.crushingWallY;
+          
+          if (tick % 15 === 0) {
+              // Dense rain of tickets from the deadline wall
+              for(let i=0; i < CANVAS_WIDTH; i += 40) {
+                   // Random gap offset
+                   const offset = Math.sin(tick * 0.05) * 20; 
+                   
+                   bullets.push(createBullet({ 
+                       x: i + offset + (Math.random()*10), 
+                       y: wallY, 
+                       speed: 1.8 + Math.random() * 0.5, 
+                       angle: Math.PI / 2, 
+                       type: BulletType.TICKET, // "Invoices"
+                       color: '#ffaaaa', 
+                       radius: 5
+                   }));
+              }
+          }
+      }
+      
+      // PHASE 3: 'Overwork "Anger of No Tea Time"'
+      // Visual: Throwing Tea Cups -> Explosion.
+      // Action: Spawns big bullet, pauses, explodes into shards.
+      else if (phase === 3) {
+          if (tick % 90 === 0) {
+              // Throw Tea Cup
+              bullets.push(createBullet({ 
+                  x: bx, y: by, 
+                  speed: 4, 
+                  angle: Math.atan2(playerY - by, playerX - bx), 
+                  type: BulletType.CUP, 
+                  color: '#ffffff', 
+                  radius: 12,
+                  timer: 60, // Explodes in 60 frames
+                  accel: -0.05 // Slows down to stop
               }));
           }
       }
       
-      // PHASE 4: "System Meltdown"
-      // Chaos + Glitches
+      // PHASE 4: 'System Meltdown "Blue Screen of Death"'
+      // Chaos, glitches.
       else if (phase === 4) {
-          // Radial bursts
-          if (tick % 120 === 0) {
-              for(let i=0; i<24; i++) {
-                  bullets.push(createBullet({ 
-                      angle: (Math.PI * 2 / 24) * i + tick*0.01, 
-                      speed: 3, type: BulletType.BIG, color: '#FF0000', radius: 12 
-                  }));
-              }
-          }
-          // Random Glitch Pixels appearing anywhere
-          if (tick % 3 === 0) {
+          if (tick % 5 === 0) {
               bullets.push(createBullet({ 
                   x: Math.random() * CANVAS_WIDTH, 
-                  y: Math.random() * CANVAS_HEIGHT * 0.6, 
-                  speed: 2 + Math.random()*2, 
+                  y: Math.random() * CANVAS_HEIGHT * 0.5, 
+                  speed: 2, 
                   angle: Math.random() * Math.PI * 2, 
-                  type: BulletType.GLITCH, color: '#00FFFF', radius: 2 
+                  type: BulletType.GLITCH, color: '#00FFFF', radius: 3 
               }));
+          }
+          if (tick % 60 === 0) {
+               // Circle burst
+               for(let i=0; i<10; i++) {
+                   bullets.push(createBullet({
+                       x: bx, y: by,
+                       speed: 2.5,
+                       angle: (Math.PI * 2 / 10) * i + tick,
+                       type: BulletType.SHARD,
+                       color: 'red'
+                   }));
+               }
           }
       }
       return bullets;
@@ -203,7 +252,20 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         const state = stateRef.current;
         const { keys } = state;
         
-        if (state.gameActive) {
+        // --- TIME STOP LOGIC (BOMB) ---
+        let timeScale = 1.0;
+        if (state.timeStopTimer > 0) {
+            state.timeStopTimer--;
+            timeScale = 0.05; // Almost frozen (slow motion)
+            if (state.timeStopTimer === 0) {
+                // Clear bullets when time resumes
+                state.bullets = []; 
+                state.shockwaves.push({ x: CANVAS_WIDTH/2, y: CANVAS_HEIGHT/2, r: 0, alpha: 1 });
+                setTimeStopActive(false);
+            }
+        }
+        
+        if (state.gameActive && timeScale > 0.1) {
             setTimeLeft(prev => {
                 if (prev <= 0) { stateRef.current.isRunning = false; onDefeat(); return 0; }
                 return prev - 16;
@@ -213,13 +275,14 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         // --- PHASE TRANSITION LOGIC ---
         const hpPercent = bossHp / enemy.maxHp;
         let newPhase = 1;
-        let pName = "Efficient Correction";
+        let pName = 'Labor Sign "Overtime Yin-Yang Orbs"';
         
         if (isReimu) {
-             if (hpPercent < PHASE_THRESHOLDS[2]) { newPhase = 4; pName = 'Overwork "System Meltdown"'; }
-             else if (hpPercent < PHASE_THRESHOLDS[1]) { newPhase = 3; pName = 'Deadline "The Crushing Wall"'; }
-             else if (hpPercent < PHASE_THRESHOLDS[0]) { newPhase = 2; pName = 'Labor Sign "Infinite Paperwork Avalanche"'; }
+             if (hpPercent < PHASE_THRESHOLDS[2]) { newPhase = 4; pName = 'System Meltdown "Blue Screen of Death"'; }
+             else if (hpPercent < PHASE_THRESHOLDS[1]) { newPhase = 3; pName = 'Overwork "Anger of No Tea Time"'; }
+             else if (hpPercent < PHASE_THRESHOLDS[0]) { newPhase = 2; pName = 'Urgent Task "Deadline Pressure"'; }
         } else {
+             // Generic for other bosses
              if (hpPercent < 0.5) newPhase = 2;
              pName = enemy.spellCardName;
         }
@@ -230,25 +293,21 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
             setShowCutIn(true);
             setTimeout(() => setShowCutIn(false), 2500);
             
-            // Clear bullets on phase change for fairness
+            // Clear bullets on phase change
             state.bullets = state.bullets.filter(b => !b.isEnemy);
             state.boss.tick = 0;
             state.boss.cooldown = 60;
+            state.crushingWallY = 0; // Reset wall
             
-            // Trigger visual glitch
             setIsGlitching(true);
             setTimeout(() => setIsGlitching(false), 300);
         }
 
-        // --- SPECIAL GIMMICK: CRUSHING WALL (Phase 3) ---
+        // --- PHASE 2 GIMMICK: DEADLINE WALL ---
         let topLimit = 0;
-        if (isReimu && currentPhase === 3) {
-            state.crushingWallY = Math.min(state.crushingWallY + 0.15, CANVAS_HEIGHT * 0.6); // Cap at 60% down
+        if (isReimu && currentPhase === 2 && timeScale > 0.5) {
+            state.crushingWallY = Math.min(state.crushingWallY + 0.05, CANVAS_HEIGHT * 0.4); // Moves down SLOWLY
             topLimit = state.crushingWallY;
-            if (state.player.y < topLimit + 15) {
-                // Instant death if touching the deadline wall
-                state.player.hp = 0; setPlayerHp(0); stateRef.current.isRunning = false; onDefeat();
-            }
         }
 
         // Player Movement
@@ -264,49 +323,51 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         // Shooting
         if (keys['z'] || keys[' ']) {
             if (state.player.shootTimer <= 0) {
-                state.bullets.push({ x: state.player.x - 8, y: state.player.y - 10, speed: 15, angle: -Math.PI / 2, accel: 0, angularVelocity: 0, radius: 4, type: BulletType.RICE, color: character.bulletColor, isEnemy: false, id: Math.random(), grazed: false });
-                state.bullets.push({ x: state.player.x + 8, y: state.player.y - 10, speed: 15, angle: -Math.PI / 2, accel: 0, angularVelocity: 0, radius: 4, type: BulletType.RICE, color: character.bulletColor, isEnemy: false, id: Math.random(), grazed: false });
-                state.player.shootTimer = 4;
+                // Kaguya's shots are distinct colors
+                state.bullets.push({ x: state.player.x - 8, y: state.player.y - 10, speed: 12, angle: -Math.PI / 2, accel: 0, angularVelocity: 0, radius: 4, type: BulletType.RICE, color: character.bulletColor, isEnemy: false, id: Math.random(), grazed: false });
+                state.bullets.push({ x: state.player.x + 8, y: state.player.y - 10, speed: 12, angle: -Math.PI / 2, accel: 0, angularVelocity: 0, radius: 4, type: BulletType.RICE, color: character.bulletColor, isEnemy: false, id: Math.random(), grazed: false });
+                state.player.shootTimer = 5;
             }
             state.player.shootTimer--;
         }
 
         // Boss AI
-        if (state.gameActive) {
+        if (state.gameActive && timeScale > 0.1) {
             state.boss.tick++;
             
-            // Reimu Movement Logic
             if (isReimu) {
                 if (currentPhase === 1) {
-                    // Teleport-ish movement
-                    if (state.boss.tick % 180 === 0) { 
-                        state.boss.targetX = 50 + Math.random() * (CANVAS_WIDTH - 100); 
-                        state.boss.targetY = 50 + Math.random() * 50; 
-                    }
+                    // PHOTOCOPIER MOVEMENT: Rigid Left-Right Scan
+                    // Move speed constant, change dir at edges
+                    const scanSpeed = 3;
+                    state.boss.x += Math.cos(state.boss.tick * 0.05) * scanSpeed;
+                    state.boss.y = 80; // Stay fixed Y
+                    state.boss.x = Math.max(50, Math.min(CANVAS_WIDTH-50, state.boss.x));
+                } else if (currentPhase === 2) {
+                    // DEADLINE: Hover above the wall
+                    state.boss.targetY = state.crushingWallY - 40; 
+                    state.boss.x = CANVAS_WIDTH / 2 + Math.sin(state.boss.tick * 0.02) * 100; // Wide sway
+                    
+                    state.boss.y += (state.boss.targetY - state.boss.y) * 0.1;
                 } else if (currentPhase === 3) {
-                    // Stay just below the wall
-                    state.boss.targetY = state.crushingWallY + 40; 
-                    if (state.boss.tick % 45 === 0) {
-                        state.boss.targetX = Math.random() * CANVAS_WIDTH;
-                    }
+                    // TEA TIME: Frantic movement
+                    state.boss.targetX = CANVAS_WIDTH / 2 + Math.sin(state.boss.tick * 0.04) * 150;
+                    state.boss.targetY = 100 + Math.cos(state.boss.tick * 0.07) * 40;
+                    
+                    state.boss.x += (state.boss.targetX - state.boss.x) * 0.05;
+                    state.boss.y += (state.boss.targetY - state.boss.y) * 0.05;
                 } else {
-                    // Standard sway
-                    state.boss.targetX = CANVAS_WIDTH / 2 + Math.sin(state.boss.tick * 0.02) * 80;
-                    state.boss.targetY = 80 + Math.sin(state.boss.tick * 0.05) * 20;
+                    // Default
+                    state.boss.x += (state.boss.targetX - state.boss.x) * 0.08;
+                    state.boss.y += (state.boss.targetY - state.boss.y) * 0.08;
                 }
-            } else {
-                // Default Enemy Movement
-                if (state.boss.tick % 120 === 0) { state.boss.targetX = 100 + Math.random() * (CANVAS_WIDTH - 200); state.boss.targetY = 50 + Math.random() * 100; }
-            }
-
-            state.boss.x += (state.boss.targetX - state.boss.x) * 0.08;
-            state.boss.y += (state.boss.targetY - state.boss.y) * 0.08;
+            } 
 
             if (state.boss.cooldown > 0) state.boss.cooldown--;
             else {
                 const pattern = isReimu 
                     ? spawnReimuPattern(state.boss.tick, state.boss.x, state.boss.y, currentPhase, state.player.x, state.player.y) 
-                    : []; // Add generic patterns here if needed
+                    : []; 
                 state.bullets.push(...pattern);
             }
         }
@@ -318,57 +379,65 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         for (let i = state.bullets.length - 1; i >= 0; i--) {
             const b = state.bullets[i];
             
-            // Homing Logic
-            if (b.homing && b.delay && b.delay > 0) {
-                b.delay--;
-                if (b.delay === 0) { 
-                    b.angle = Math.atan2(state.player.y - b.y, state.player.x - b.x); 
-                    b.speed = 4; // Launch speed
-                } else { 
-                    b.speed = 0.5; // Hover speed
-                }
-            }
+            // Apply Time Stop Freeze
+            const currentSpeed = b.isEnemy ? b.speed * timeScale : b.speed;
+            const currentAccel = b.isEnemy ? b.accel * timeScale : b.accel;
+            const currentAngVel = b.isEnemy ? b.angularVelocity * timeScale : b.angularVelocity;
 
-            // Paperwork Sway Logic
-            if (b.type === BulletType.PAPER) { 
-                b.x += Math.sin(state.boss.tick * 0.1 + b.id) * 1.5; 
-                b.angle += 0.05; // Spin
-            }
-
-            b.speed += b.accel;
-            b.angle += b.angularVelocity;
-            b.x += Math.cos(b.angle) * b.speed;
-            b.y += Math.sin(b.angle) * b.speed;
-
-            // --- MIRROR REFLECTION MECHANIC ---
-            let destroy = false;
-            if (b.maxReflections && b.maxReflections > 0) {
-                 if (b.x <= 0 || b.x >= CANVAS_WIDTH) {
-                     b.angle = Math.PI - b.angle; // Reflect horizontally
-                     b.maxReflections--;
-                     b.color = '#aa00ff'; // Reflected color
-                     b.x = Math.max(1, Math.min(CANVAS_WIDTH - 1, b.x));
-                     
-                     // Add particle effect on bounce
-                     state.particles.push({ x: b.x, y: b.y, vx: 0, vy: 0, life: 10, color: 'white', size: 5, alpha: 1 });
+            // Exploding Cup Logic (Tea Time)
+            if (b.type === BulletType.CUP && b.timer !== undefined) {
+                 if (timeScale > 0.5) b.timer--;
+                 if (b.timer <= 0) {
+                     // EXPLODE
+                     for(let k=0; k<12; k++) {
+                         state.bullets.push({
+                             x: b.x, y: b.y,
+                             speed: 2 + Math.random(),
+                             angle: (Math.PI*2/12)*k + Math.random()*0.5,
+                             type: BulletType.SHARD,
+                             color: '#aaffff',
+                             radius: 3,
+                             isEnemy: true,
+                             id: Math.random(),
+                             grazed: false,
+                             accel: 0, angularVelocity: 0
+                         });
+                     }
+                     // Create explosion effect
+                     state.particles.push({ x: b.x, y: b.y, vx: 0, vy: 0, life: 20, color: 'white', size: 20, alpha: 1 });
+                     state.bullets.splice(i, 1);
+                     continue;
                  }
             }
 
-            if (b.x < -50 || b.x > CANVAS_WIDTH + 50 || b.y < -50 || b.y > CANVAS_HEIGHT + 50) destroy = true;
-            if (destroy) { state.bullets.splice(i, 1); continue; }
+            b.speed += currentAccel;
+            b.angle += currentAngVel;
+            b.x += Math.cos(b.angle) * currentSpeed;
+            b.y += Math.sin(b.angle) * currentSpeed;
+
+            if (b.x < -50 || b.x > CANVAS_WIDTH + 50 || b.y < -50 || b.y > CANVAS_HEIGHT + 50) {
+                state.bullets.splice(i, 1); 
+                continue; 
+            }
 
             // Collision Detection
             if (b.isEnemy) {
+                // If Time Stop is active, bullets are ghosted and don't hit (visual only)
+                if (state.timeStopTimer > 0) continue;
+
                 const dx = b.x - state.player.x;
                 const dy = b.y - state.player.y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
+                // Hitbox calculations based on shape
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                let hitDist = b.radius + playerHitbox;
+                
+                if (b.type === BulletType.TICKET) hitDist = 6 + playerHitbox; // Square is bigger
 
                 if (state.player.iframes <= 0) {
-                    if (dist < b.radius + playerHitbox) {
+                    if (dist < hitDist) {
                         state.player.hp -= 1;
                         setPlayerHp(state.player.hp);
                         
-                        // Hit Effect
                         setIsGlitching(true);
                         setTimeout(() => setIsGlitching(false), 200);
                         state.shockwaves.push({ x: state.player.x, y: state.player.y, r: 10, alpha: 1.0 });
@@ -376,9 +445,9 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                         if (state.player.hp <= 0) { stateRef.current.isRunning = false; onDefeat(); }
                         else {
                             state.player.iframes = 120;
-                            // Clear enemy bullets
-                            state.bullets = state.bullets.filter(bull => !bull.isEnemy); 
-                            setBombs(2); 
+                            // Auto-clear nearby bullets on hit
+                            state.bullets = state.bullets.filter(bull => !bull.isEnemy || Math.hypot(bull.x - state.player.x, bull.y - state.player.y) > 150); 
+                            setBombs(3); // Reset bombs on death
                             state.boss.cooldown = 120;
                         }
                         break; 
@@ -395,7 +464,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                 const dy = b.y - state.boss.y;
                 if (dx*dx + dy*dy < 1600) { // 40px radius
                     setBossHp(h => {
-                        const nh = h - 15;
+                        const nh = h - 10; // Slightly tankier boss
                         if (nh <= 0) { stateRef.current.isRunning = false; onVictory(); return 0; }
                         return nh;
                     });
@@ -439,95 +508,98 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
             ctx.beginPath(); ctx.arc(bx, by, 30, 0, Math.PI*2); ctx.fill();
         }
 
-        // Draw Crushing Wall (Phase 3)
-        if (isReimu && currentPhase === 3 && state.crushingWallY > 0) {
+        // Draw Deadline Wall (Phase 2)
+        if (isReimu && currentPhase === 2 && state.crushingWallY > 0) {
             const y = state.crushingWallY;
-            
-            // Gradient wall
             const grad = ctx.createLinearGradient(0, y-100, 0, y);
             grad.addColorStop(0, 'rgba(255,0,0,0)');
-            grad.addColorStop(0.8, 'rgba(255,0,0,0.5)');
-            grad.addColorStop(1, 'rgba(255,0,0,0.9)');
+            grad.addColorStop(1, 'rgba(255,0,0,0.6)');
             ctx.fillStyle = grad;
             ctx.fillRect(0, 0, CANVAS_WIDTH, y);
             
-            // The Bar itself
-            ctx.fillStyle = '#FF0000';
-            ctx.fillRect(0, y, CANVAS_WIDTH, 4);
+            ctx.strokeStyle = '#FF0000';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CANVAS_WIDTH, y); ctx.stroke();
             
-            // Warnings
             ctx.fillStyle = '#FF0000';
             ctx.font = '12px monospace';
-            ctx.globalAlpha = 0.8 + Math.sin(Date.now() / 100) * 0.2;
-            for(let i=0; i<6; i++) ctx.fillText("DEADLINE REACHED", i*100 + (Date.now()/20)%100 - 50, y-10);
-            ctx.globalAlpha = 1;
+            ctx.fillText("DEADLINE PRESSING...", 10, y-10);
         }
 
         // Draw Bullets
         state.bullets.forEach(b => {
-            ctx.fillStyle = b.color;
-            if (b.type === BulletType.PAPER) {
+            // Visual Filter for Time Stop
+            if (state.timeStopTimer > 0 && b.isEnemy) {
+                ctx.fillStyle = '#555555'; // Greyed out
+                ctx.globalAlpha = 0.5;
+            } else {
+                ctx.fillStyle = b.color;
+                ctx.globalAlpha = 1;
+            }
+
+            if (b.type === BulletType.TICKET) { // Rectangular Ticket
                 ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle); 
-                ctx.fillRect(-6, -8, 12, 16); // Paper shape
-                ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.strokeRect(-6,-8,12,16);
+                ctx.fillRect(-6, -8, 12, 16); 
+                ctx.fillStyle = 'black'; 
+                // Draw lines on paper
+                ctx.fillRect(-4, -4, 8, 1); ctx.fillRect(-4, 0, 8, 1); ctx.fillRect(-4, 4, 6, 1);
                 ctx.restore();
-            } else if (b.type === BulletType.AMULET) {
-                ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle); 
-                ctx.fillStyle = '#AA0000'; ctx.fillRect(-4, -6, 8, 12); 
-                ctx.fillStyle = 'white'; ctx.fillRect(-2, -4, 4, 8); 
+            } else if (b.type === BulletType.CUP) { // Tea Cup
+                ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
+                ctx.beginPath(); ctx.arc(0, 0, b.radius, 0, Math.PI, false); ctx.fill(); // Cup body
+                ctx.fillRect(-8, -8, 16, 2); // Rim
+                ctx.strokeStyle = b.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(6, -2, 4, 0, Math.PI*2); ctx.stroke(); // Handle
                 ctx.restore();
-            } else if (b.type === BulletType.GLITCH) {
-                ctx.fillStyle = `hsl(${Math.random()*360}, 100%, 50%)`;
-                ctx.fillRect(b.x, b.y, 6, 6);
-            } else if (b.type === BulletType.LASER_V) {
-                ctx.shadowBlur = 5; ctx.shadowColor = b.color;
-                ctx.fillRect(b.x - 2, b.y - 10, 4, 40);
-                ctx.shadowBlur = 0;
+            } else if (b.type === BulletType.SHARD) { // Sharp Triangle
+                ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
+                ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4, 4); ctx.lineTo(-4, 4); ctx.fill();
+                ctx.restore();
+            } else if (b.type === BulletType.ORB) { // Yin Yang
+                ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(state.boss.tick * 0.1); 
+                ctx.beginPath(); ctx.arc(0,0,b.radius, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(0,0,b.radius/2, 0, Math.PI*2); ctx.fill();
+                ctx.restore();
             } else {
                 ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); ctx.fill();
             }
         });
+        ctx.globalAlpha = 1;
+
+        // Draw Shockwaves (Time Stop or Hit)
+        for(let i=state.shockwaves.length-1; i>=0; i--) {
+            const sw = state.shockwaves[i];
+            sw.r += 5;
+            sw.alpha -= 0.05;
+            if(sw.alpha <= 0) { state.shockwaves.splice(i,1); continue; }
+            
+            ctx.beginPath();
+            ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI*2);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${sw.alpha})`;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Invert colors inside the shockwave for Time Stop effect
+            if (state.timeStopTimer > 0) {
+                 ctx.fillStyle = `rgba(0, 0, 50, ${sw.alpha * 0.2})`;
+                 ctx.fill();
+            }
+        }
 
         // Draw Player
         if (state.player.iframes % 4 < 2) {
             if (playerSprite) {
-                const pSize = 48; // Slightly larger for detail
+                const pSize = 48; 
                 ctx.drawImage(playerSprite, state.player.x - pSize/2, state.player.y - pSize/2, pSize, pSize);
             } else {
                 ctx.fillStyle = 'blue';
                 ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 10, 0, Math.PI*2); ctx.fill();
             }
-            // Hitbox marker
             if (state.player.isFocus) {
                 ctx.fillStyle = '#ff0000';
                 ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 4, 0, Math.PI*2); ctx.fill();
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 1;
-                ctx.stroke();
             }
         }
 
-        // Draw Particles
-        state.particles.forEach((p, i) => {
-            p.x += p.vx; p.y += p.vy; p.life--;
-            ctx.globalAlpha = p.life / 15;
-            ctx.fillStyle = p.color;
-            ctx.fillRect(p.x, p.y, p.size, p.size);
-            if(p.life <= 0) state.particles.splice(i, 1);
-        });
-        ctx.globalAlpha = 1;
-
-        // Mirror Distortion Effect (Center screen)
-        if (isReimu) {
-             const cx = CANVAS_WIDTH / 2;
-             const cy = CANVAS_HEIGHT / 2;
-             // Fake "scanline" overlay for the glitchy office look
-             ctx.fillStyle = 'rgba(0, 255, 255, 0.02)';
-             for(let i=0; i<CANVAS_HEIGHT; i+=4) {
-                 ctx.fillRect(0, i + (Date.now()/50)%4, CANVAS_WIDTH, 1);
-             }
-        }
-        
         ctx.restore();
     };
     reqId = requestAnimationFrame(update);
@@ -549,11 +621,10 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         <div className="relative" style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}>
             
             {/* BACKGROUND */}
-            <div className="absolute inset-0 z-0 overflow-hidden" style={{ backgroundImage: `url(${enemy.backgroundUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+            <div className={`absolute inset-0 z-0 overflow-hidden transition-all duration-500 ${timeStopActive ? 'grayscale brightness-50' : ''}`} style={{ backgroundImage: `url(${enemy.backgroundUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
                 {isReimu ? (
                     <>
                         <div className="absolute inset-0 bg-blue-900/40 mix-blend-multiply"></div>
-                        {/* Moving grid for tunnel effect */}
                         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] opacity-10 animate-[slideY_2s_linear_infinite]" style={{ backgroundSize: '50px 50px' }}></div>
                         <style>{`@keyframes slideY { from { background-position: 0 0; } to { background-position: 0 100px; } }`}</style>
                     </>
@@ -561,6 +632,16 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                     <div className="absolute inset-0 bg-black/60"></div>
                 )}
             </div>
+
+            {/* TIME STOP OVERLAY */}
+            {timeStopActive && (
+                <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center">
+                    <div className="text-4xl text-white font-serif tracking-[0.5em] animate-pulse drop-shadow-[0_0_10px_white]">
+                        TIME STAGNATION
+                    </div>
+                    <div className="absolute inset-0 border-8 border-white opacity-20"></div>
+                </div>
+            )}
 
             {/* HUD */}
             <div className="absolute top-0 left-0 right-0 z-30 p-2 font-mono">
@@ -573,7 +654,6 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                     </div>
                 </div>
                 
-                {/* Boss Health Bar: WORK QUOTA */}
                 <div className="w-full h-6 bg-black/80 border border-cyan-700 relative overflow-hidden skew-x-[-10deg]">
                     <div className="absolute inset-0 flex items-center justify-center z-10 text-[10px] text-cyan-200 tracking-[0.5em] font-bold">WORK QUOTA</div>
                     <div 
@@ -586,7 +666,6 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
             {/* SPELL CARD CUT-IN */}
             <div className={`absolute top-24 right-0 z-40 pointer-events-none transition-all duration-500 transform flex flex-col items-end ${showCutIn ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}`}>
                  <div className="relative">
-                    {/* Enemy Portrait Cut-in */}
                     {enemy.portraitUrl && (
                         <div className="w-[300px] h-[300px] absolute -right-10 -top-10 z-0 overflow-hidden mask-image-gradient">
                             <img src={enemy.portraitUrl} className="w-full h-full object-cover opacity-80" alt="Cut In" />
@@ -620,9 +699,10 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                     </div>
                 </div>
                 <div>
-                    <div className="text-cyan-800 text-xs mb-1">MEM_DUMP (BOMBS)</div>
+                    <div className="text-cyan-800 text-xs mb-1">TIME STAGNATION (BOMBS)</div>
+                    <div className="text-xs text-gray-500 mb-2">[PRESS X]</div>
                     <div className="flex gap-2 text-2xl">
-                        {Array(bombs).fill(0).map((_, i) => <span key={i} className="text-green-400 drop-shadow-[0_0_5px_green]">♦</span>)}
+                        {Array(bombs).fill(0).map((_, i) => <span key={i} className="text-purple-400 drop-shadow-[0_0_5px_purple] animate-pulse">⏳</span>)}
                     </div>
                 </div>
                 
