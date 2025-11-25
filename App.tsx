@@ -51,30 +51,30 @@ const App: React.FC = () => {
   // --- Asset Logic ---
 
   const fetchAsset = async (id: string, name: string, desc: string, type: AssetType, visualPrompt?: string) => {
-    // 1. Try Local FS first
+    // 1. Try Local FS first if connected
     if (hasFsAccess) {
         const fsUrl = await loadAssetFromFS(id, type);
         if (fsUrl) {
-            console.log(`[App] Loaded local asset: ${name}`);
+            console.log(`[App] Loaded local asset: ${name} (ID: ${id})`);
             return { url: fsUrl, isLocal: true };
         }
     }
     
-    // 2. Generate with Timeout (15s max)
-    console.log(`[App] Generating asset: ${name}`);
+    // 2. Generate with Timeout (20s max)
+    console.log(`[App] Generating asset: ${name} (ID: ${id})`);
     const result = await withTimeout(
         getOrGenerateAsset(id, name, desc, type, visualPrompt),
-        15000, 
+        20000, 
         null
     );
 
     // 3. Save if successful and FS connected
     if (result && !result.isLocal && hasFsAccess) {
         try {
-            setLoadingStatus(`Saving ${name} to disk...`);
+            setLoadingStatus(`Saving ${name} to local storage...`);
             // CRITICAL: Await the save to ensure it writes before we move on
             await saveAssetToFS(id, type, result.url);
-            console.log(`[App] Successfully saved ${name} to FS`);
+            console.log(`[App] Saved ${name} to file system.`);
             return { url: result.url, isLocal: true };
         } catch (e) { 
             console.error(`[App] Auto-save failed for ${name}:`, e);
@@ -187,13 +187,15 @@ const App: React.FC = () => {
           // 3. Background
           // If it's Stage 1 Reimu, use the special Boss BG we preloaded or fetch it now
           if (enemy.name.includes("Reimu")) {
-               if (!loadedAssets.backgrounds['STAGE1_BOSS_BG']) {
-                    const bg = await fetchAsset(
-                        'STAGE1_BOSS_BG', 'Bureaucratic Tunnel', 'Tunnel of paperwork', 'background',
-                        'Anime background art. A futuristic cyber-tunnel lined with millions of flying papers, red "ERROR" windows, and glowing fiber optic cables. High speed motion blur.'
-                    );
-                    if (bg) updateAssetRecord('STAGE1_BOSS_BG', 'background', bg);
-               }
+               // Re-fetch (or load from FS) the specific BG ID
+               const bg = await fetchAsset(
+                    'STAGE1_BOSS_BG', 
+                    'Bureaucratic Tunnel', 
+                    'Tunnel of paperwork', 
+                    'background',
+                    'Anime background art. A futuristic cyber-tunnel lined with millions of flying papers, red "ERROR" windows, and glowing fiber optic cables. High speed motion blur.'
+               );
+               if (bg) updateAssetRecord('STAGE1_BOSS_BG', 'background', bg);
           } else {
               const bgPrompt = enemy.visualPrompt ? `${enemy.visualPrompt} (Atmospheric Background)` : enemy.description;
               const bg = await fetchAsset(`${enemy.name}_BG`, `${enemy.name} Location`, bgPrompt, 'background', bgPrompt);
@@ -218,7 +220,7 @@ const App: React.FC = () => {
     const scenario = SCENARIOS[id];
     setCurrentScenario(scenario);
     
-    // Check if critical assets are ready
+    // Check if critical assets are ready in memory
     const basicReady = loadedAssets.sprites[id] && loadedAssets.portraits[id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
     let propsReady = true;
     if (id === CharacterId.KAGUYA) {
@@ -227,6 +229,7 @@ const App: React.FC = () => {
          propsReady = !!(loadedAssets.props['PROP_BAMBOO_TREE']);
     }
 
+    // Force load if not ready (this triggers FS check inside fetchAsset)
     if (!basicReady || !propsReady) {
         await loadCharacterAssets(id);
     }
@@ -283,6 +286,10 @@ const App: React.FC = () => {
       Object.entries(loadedAssets.props).forEach(([key, val]) => {
           result[key] = val.url;
       });
+      // Also inject Reimu boss sprite for the map
+      if (loadedAssets.sprites['PROP_REIMU_WORK']) {
+          result['PROP_REIMU_WORK'] = loadedAssets.sprites['PROP_REIMU_WORK'].url;
+      }
       return result;
   };
 
@@ -317,13 +324,13 @@ const App: React.FC = () => {
                     {!hasFsAccess ? (
                         <button 
                             onClick={handleFileSystemConnect}
-                            className="border border-[#FFD700] text-[#FFD700] hover:bg-[#FFD700] hover:text-black px-8 py-2 font-mono text-xs tracking-widest transition-all duration-300 shadow-[0_0_15px_rgba(255,215,0,0.3)]"
+                            className="border border-[#FFD700] text-[#FFD700] hover:bg-[#FFD700] hover:text-black px-8 py-2 font-mono text-xs tracking-widest transition-all duration-300 shadow-[0_0_15px_rgba(255,215,0,0.3)] animate-pulse"
                         >
                             [ INITIALIZE LOCAL STORAGE ]
                         </button>
                     ) : (
                          <div className="text-green-400 font-mono text-xs tracking-widest border border-green-800 px-4 py-2 bg-black/50">
-                             SYSTEM LINK: STABLE
+                             SYSTEM LINK: STABLE (Assets will be saved)
                          </div>
                     )}
                 </div>

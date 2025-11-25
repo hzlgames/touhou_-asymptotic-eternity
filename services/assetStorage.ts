@@ -8,7 +8,7 @@ export interface AssetResult {
     isLocal: boolean;
 }
 
-// Type definitions for File System Access API (polyfill/fix for TS)
+// Type definitions for File System Access API
 interface FileSystemHandle {
     kind: 'file' | 'directory';
     name: string;
@@ -30,13 +30,41 @@ interface FileSystemDirectoryHandle extends FileSystemHandle {
 let rootDirHandle: FileSystemDirectoryHandle | null = null;
 let assetDirs: Record<string, FileSystemDirectoryHandle> = {};
 
+// --- HELPER FUNCTIONS ---
+
+// Strictly sanitize IDs to be safe filenames (Alphanumeric + Underscore only)
+const sanitizeId = (id: string): string => {
+    return id.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
+};
+
+const getFilename = (id: string) => {
+    return `${sanitizeId(id)}${FILE_EXT}`;
+};
+
+/**
+ * Converts a Base64 Data URL to a Blob efficiently.
+ * This is more robust than fetch(dataUrl) for large strings.
+ */
+const dataURLtoBlob = (dataurl: string): Blob => {
+    const arr = dataurl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+};
+
 /**
  * Prompts the user to select a folder to store game data.
  * Automatically creates the required subfolder structure.
  */
 export const connectFileSystem = async (): Promise<boolean> => {
     try {
-        // @ts-ignore - showDirectoryPicker is not in all TS lib definitions yet
+        // @ts-ignore - API might not be in TS types
         rootDirHandle = await window.showDirectoryPicker({
             mode: 'readwrite',
             startIn: 'documents'
@@ -52,10 +80,10 @@ export const connectFileSystem = async (): Promise<boolean> => {
         assetDirs[ASSET_DIRS.PORTRAITS] = await assetsHandle.getDirectoryHandle(ASSET_DIRS.PORTRAITS, { create: true });
         assetDirs[ASSET_DIRS.BACKGROUNDS] = await assetsHandle.getDirectoryHandle(ASSET_DIRS.BACKGROUNDS, { create: true });
 
-        console.log("File System Connected & Structure Verified");
+        console.log("[FS] File System Connected & Structure Verified");
         return true;
     } catch (error) {
-        console.error("User cancelled or FS API not supported:", error);
+        console.error("[FS] User cancelled or FS API not supported:", error);
         return false;
     }
 };
@@ -72,10 +100,6 @@ const getDirHandleForType = (type: AssetType): FileSystemDirectoryHandle | null 
     }
 };
 
-const getFilename = (id: string) => {
-    return `${id.replace(/\s+/g, '_').toUpperCase()}${FILE_EXT}`;
-};
-
 /**
  * Attempts to load asset from the connected File System.
  */
@@ -89,7 +113,7 @@ export const loadAssetFromFS = async (id: string, type: AssetType): Promise<stri
         const file = await fileHandle.getFile();
         return URL.createObjectURL(file);
     } catch (e) {
-        // File not found
+        // File not found is expected behavior for new assets
         return null;
     }
 };
@@ -100,43 +124,25 @@ export const loadAssetFromFS = async (id: string, type: AssetType): Promise<stri
 export const saveAssetToFS = async (id: string, type: AssetType, dataUrl: string): Promise<boolean> => {
     const dir = getDirHandleForType(type);
     if (!dir) {
-        console.warn("Cannot save asset: FS not connected or Directory not found.");
+        console.warn("[FS] Cannot save asset: FS not connected or Directory not found.");
         return false;
     }
 
     try {
         const filename = getFilename(id);
-        const fileHandle = await dir.getFileHandle(filename, { create: true });
         
-        // Convert DataURL to Blob
-        const response = await fetch(dataUrl);
-        const blob = await response.blob();
+        // Convert DataURL to Blob manually to avoid fetch() issues
+        const blob = dataURLtoBlob(dataUrl);
 
+        const fileHandle = await dir.getFileHandle(filename, { create: true });
         const writable = await fileHandle.createWritable();
         await writable.write(blob);
         await writable.close();
         
-        console.log(`[FS] Saved ${filename} successfully.`);
+        console.log(`[FS] Successfully saved: ${filename} (${(blob.size / 1024).toFixed(2)} KB)`);
         return true;
     } catch (e) {
-        console.error("Failed to write file:", e);
+        console.error(`[FS] Failed to write file ${id}:`, e);
         throw e; // Re-throw to handle in App.tsx
     }
-};
-
-/**
- * Legacy Fallback: Download via browser anchor tag (if FS is not connected)
- */
-export const downloadAssetLegacy = (dataUrl: string, id: string, type: AssetType) => {
-    const filename = getFilename(id);
-    const pathHint = `/${ASSET_DIRS.ROOT}/${type}s/`; // heuristic hint
-    
-    const link = document.createElement('a');
-    link.href = dataUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    alert(`Saved "${filename}" to Downloads.\n\nTo use this file, move it to:\n[GameFolder]${pathHint}`);
 };
