@@ -9,29 +9,29 @@ interface ExplorationProps {
   scenarioEnemies: Enemy[];
   onEncounter: (enemy: Enemy) => void;
   backgroundUrl?: string;
-  propSprites: Record<string, string>; // New Prop for generated assets
+  propSprites: Record<string, string>;
 }
 
-const MOVEMENT_SPEED_MS = 200; // Time to move one tile
+const MOVEMENT_SPEED_MS = 200;
 
-const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, onEncounter, backgroundUrl, propSprites }) => {
-  // --- ENGINE STATE ---
+const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, onEncounter, propSprites }) => {
   const [worldType, setWorldType] = useState<WorldType>(WorldType.REALITY);
   const [sanity, setSanity] = useState(100);
   const [flags, setFlags] = useState<Set<string>>(new Set());
   const [inventory, setInventory] = useState<Set<string>>(new Set());
   const [mapData, setMapData] = useState<MapData | null>(null);
   
-  // Physics & FX
-  const [playerGridPos, setPlayerGridPos] = useState({ x: 0, y: 0 }); // Logical Grid Position
-  const [isMoving, setIsMoving] = useState(false); // Lock input during movement animation
+  const [playerGridPos, setPlayerGridPos] = useState({ x: 0, y: 0 });
+  const [isMoving, setIsMoving] = useState(false);
   const [direction, setDirection] = useState(1);
   const [interactionTarget, setInteractionTarget] = useState<MapEntity | null>(null);
   const [dialogue, setDialogue] = useState<{title: string, text: string, choices?: string[]} | null>(null);
-  const [flashOpacity, setFlashOpacity] = useState(0); // Teleport effect
-  const [loopMessage, setLoopMessage] = useState<string | null>(null); // Feedback for infinite loop
+  const [flashOpacity, setFlashOpacity] = useState(0); 
+  const [loopMessage, setLoopMessage] = useState<string | null>(null);
+  
+  // Debounce encounter trigger
+  const [encounterTriggered, setEncounterTriggered] = useState(false);
 
-  // --- INITIALIZATION ---
   const handleReimuEncounter = useCallback(() => {
      setDialogue({
          title: "Administrator Reimu",
@@ -54,64 +54,59 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       }
   }, [flags, inventory, handleReimuEncounter, handleMarisaEncounter, worldType, character.id]);
 
-  // Initial Load
   useEffect(() => {
     const data = loadMap();
     setMapData(data);
-    // Only set spawn if not set (or if map changed drastically, simplified here)
     if (playerGridPos.x === 0 && playerGridPos.y === 0) {
         setPlayerGridPos(data.spawnPoint);
     }
-  }, [loadMap]); // Dependency on loadMap handles re-renders on flag changes
+  }, [loadMap]); 
 
-  // --- INPUT & MOVEMENT LOGIC ---
   const keysRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => { 
         keysRef.current[e.key] = true;
         
-        // Lens Toggle Logic (Requires Item)
         if (e.code === 'Space' && !dialogue) {
             if (inventory.has('Obscure Lens')) {
                 setWorldType(prev => prev === WorldType.REALITY ? WorldType.INNER_WORLD : WorldType.REALITY);
             } else {
-                setDialogue({
-                    title: "System Restriction",
-                    text: "You sense a hidden layer to reality, but your naked eyes cannot perceive the 'Inner World'. You need a catalyst."
-                });
+                setDialogue({ title: "System Restriction", text: "You sense a hidden layer to reality, but your naked eyes cannot perceive the 'Inner World'. You need a catalyst." });
             }
         }
         
-        // Interaction
         if ((e.key === 'z' || e.key === 'Enter') && !dialogue && interactionTarget) {
             handleInteraction(interactionTarget);
         }
         
-        // Close Dialogue
+        // Handle Dialogue Advance
         if ((e.key === 'z' || e.key === 'Enter') && dialogue) {
-            let handled = false;
+            let isBossTrigger = false;
             
-            // Softlock Protection: Ensure we close the dialogue even if the enemy lookup fails
             if (dialogue.title.includes("Reimu")) {
                 const reimu = scenarioEnemies.find(e => e.name.includes('Reimu'));
                 if (reimu) {
-                    onEncounter(reimu);
-                    handled = true;
-                } else {
-                    console.warn("Enemy Reimu not found in scenario data!");
+                    isBossTrigger = true;
+                    if (!encounterTriggered) {
+                        setEncounterTriggered(true);
+                        setDialogue(null); // Close dialogue first
+                        onEncounter(reimu); // Then trigger loading
+                    }
                 }
             } else if (dialogue.title.includes("Marisa")) {
                 const marisa = scenarioEnemies.find(e => e.name.includes('Marisa'));
                 if (marisa) {
-                    onEncounter(marisa);
-                    handled = true;
-                } else {
-                    console.warn("Enemy Marisa not found in scenario data!");
+                    isBossTrigger = true;
+                    if (!encounterTriggered) {
+                         setEncounterTriggered(true);
+                         setDialogue(null);
+                         onEncounter(marisa);
+                    }
                 }
             } 
             
-            if (!handled) {
+            if (!isBossTrigger) {
                 setDialogue(null);
             }
         }
@@ -121,14 +116,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
-    // GAME LOOP (Input Polling)
     const loop = setInterval(() => {
-        if (!mapData || dialogue) return;
+        if (!mapData || dialogue || encounterTriggered) return;
 
-        // 0. FX Decay
         if (flashOpacity > 0) setFlashOpacity(prev => Math.max(0, prev - 0.1));
 
-        // 1. Sanity Drain
         if (worldType === WorldType.INNER_WORLD) {
             setSanity(prev => Math.max(0, prev - 0.05)); 
              if (sanity <= 0) {
@@ -139,7 +131,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             setSanity(prev => Math.min(100, prev + 0.3));
         }
 
-        // 2. Movement (Grid Based)
         if (!isMoving) {
             let dx = 0;
             let dy = 0;
@@ -156,21 +147,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                 if (isWalkable(nextX, nextY, mapData, worldType)) {
                     setIsMoving(true);
                     setPlayerGridPos({ x: nextX, y: nextY });
-                    
-                    // Trigger Logic
                     checkTriggers(nextX, nextY, mapData);
-
-                    // Animation Lock
-                    setTimeout(() => {
-                        setIsMoving(false);
-                    }, MOVEMENT_SPEED_MS);
-                } else {
-                    // Collision feedback?
+                    setTimeout(() => setIsMoving(false), MOVEMENT_SPEED_MS);
                 }
             }
         }
-
-        // 3. Target Finding
         updateInteractionTarget(playerGridPos, mapData, worldType);
 
     }, 16);
@@ -180,43 +161,21 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [mapData, playerGridPos, worldType, dialogue, interactionTarget, sanity, flashOpacity, isMoving, inventory]);
-
-  // --- LOGIC HELPERS ---
+  }, [mapData, playerGridPos, worldType, dialogue, interactionTarget, sanity, flashOpacity, isMoving, inventory, encounterTriggered]);
 
   const isWalkable = (x: number, y: number, data: MapData, world: WorldType) => {
-      // Bounds
       if (x < 0 || x >= data.width || y < 0 || y >= data.height) return false;
-
-      // Tile Checks
       const tile = data.tiles[y]?.[x];
-      
-      const blockers = [
-          TileType.WALL, 
-          TileType.VOID, 
-          TileType.LOCKED_DOOR, 
-          TileType.PILLAR, 
-          TileType.BOOKSHELF, 
-          TileType.FURNACE,
-          // Water is conditionally solid based on logic (handled in stage gen) but generally blocked
-      ];
-
-      // Special Case: Water is only walkable if it's a bridge or cleared fire
+      const blockers = [TileType.WALL, TileType.VOID, TileType.LOCKED_DOOR, TileType.PILLAR, TileType.BOOKSHELF, TileType.FURNACE];
       if (tile === TileType.WATER) return false;
-
-      // Special Case: Secret Door is walkable
       if (tile === TileType.SECRET_DOOR) return true;
-      if (tile === TileType.PATH) return true; // Path is always walkable
-
+      if (tile === TileType.PATH) return true; 
       if (blockers.includes(tile)) return false;
 
-      // Entity Collision
       for (const ent of data.entities) {
           if (ent.isSolid && (ent.visibleIn === 'BOTH' || ent.visibleIn === world)) {
               if (ent.hideFlag && flags.has(ent.hideFlag)) continue;
               if (ent.reqFlag && !flags.has(ent.reqFlag)) continue;
-
-              // Grid exact match
               if (ent.x === x && ent.y === y) return false;
           }
       }
@@ -226,18 +185,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   const checkTriggers = (x: number, y: number, data: MapData) => {
       const key = `${x},${y}`;
       const trigger = data.triggers[key];
-      
       if (trigger) {
-          // Check Condition
           if (trigger.condition && !trigger.condition(flags)) return;
-
           if (trigger.type === 'TELEPORT' && trigger.targetX !== undefined) {
-              // Delay teleport slightly to allow move animation to start/finish nicely
               setTimeout(() => {
-                  setPlayerGridPos({ 
-                      x: trigger.targetX!, 
-                      y: trigger.targetY || y 
-                  });
+                  setPlayerGridPos({ x: trigger.targetX!, y: trigger.targetY || y });
                   if (trigger.flashEffect) setFlashOpacity(1);
                   if (trigger.message) {
                       setLoopMessage(trigger.message);
@@ -250,12 +202,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
   const updateInteractionTarget = (pos: {x:number, y:number}, data: MapData, world: WorldType) => {
       let nearest: MapEntity | null = null;
-      let minDst = 1.5; // Slightly larger range for grid comfort
+      let minDst = 1.5; 
       for (const ent of data.entities) {
           if (ent.visibleIn !== 'BOTH' && ent.visibleIn !== world) continue;
           if (ent.hideFlag && flags.has(ent.hideFlag)) continue;
           if (ent.reqFlag && !flags.has(ent.reqFlag)) continue;
-          
           const dist = Math.sqrt(Math.pow(pos.x - ent.x, 2) + Math.pow(pos.y - ent.y, 2));
           if (dist < minDst) {
               minDst = dist;
@@ -268,43 +219,27 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   const handleInteraction = (entity: MapEntity) => {
       const helpers = {
           setFlag: (f: string) => setFlags(prev => new Set(prev).add(f)),
-          removeFlag: (f: string) => setFlags(prev => {
-              const next = new Set(prev);
-              next.delete(f);
-              return next;
-          }),
+          removeFlag: (f: string) => setFlags(prev => { const next = new Set(prev); next.delete(f); return next; }),
           hasFlag: (f: string) => flags.has(f),
-          addItem: (id: string, name: string) => {
-              setInventory(prev => new Set(prev).add(name));
-              setDialogue({ title: "Item Get!", text: `You obtained: ${name}` });
-          },
+          addItem: (id: string, name: string) => { setInventory(prev => new Set(prev).add(name)); setDialogue({ title: "Item Get!", text: `You obtained: ${name}` }); },
           hasItem: (id: string) => inventory.has(id),
           worldType
       };
-
-      if (entity.onInteract) {
-          entity.onInteract(helpers);
-      }
+      if (entity.onInteract) entity.onInteract(helpers);
   };
 
-  // --- CAMERA ---
   const getCameraOffset = () => {
       if (!mapData) return { x: 0, y: 0 };
       const cx = playerGridPos.x * TILE_SIZE - window.innerWidth / 2;
       const cy = playerGridPos.y * TILE_SIZE - window.innerHeight / 2;
-      
       let tx = -cx;
       let ty = -cy;
-      
       const minX = -(mapData.width * TILE_SIZE - window.innerWidth);
       const minY = -(mapData.height * TILE_SIZE - window.innerHeight);
-
       if (mapData.width * TILE_SIZE < window.innerWidth) tx = (window.innerWidth - mapData.width * TILE_SIZE) / 2;
       else tx = Math.max(minX, Math.min(0, tx));
-
       if (mapData.height * TILE_SIZE < window.innerHeight) ty = (window.innerHeight - mapData.height * TILE_SIZE) / 2;
       else ty = Math.max(minY, Math.min(0, ty));
-
       return { x: tx, y: ty };
   };
   const camera = getCameraOffset();
@@ -313,77 +248,34 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black font-serif">
-        
-        {/* WORLD RENDERER */}
-        <div 
-            className="will-change-transform transition-transform duration-300 ease-out"
-            style={{ transform: `translate3d(${camera.x}px, ${camera.y}px, 0)` }}
-        >
+        <div className="will-change-transform transition-transform duration-300 ease-out" style={{ transform: `translate3d(${camera.x}px, ${camera.y}px, 0)` }}>
             {character.id === CharacterId.KAGUYA ? (
                  <Stage1Eientei mapData={mapData} worldType={worldType} propSprites={propSprites} />
             ) : (
                  <Stage1Bamboo mapData={mapData} worldType={worldType} propSprites={propSprites} />
             )}
-
-            {/* Player */}
-            <div 
-                className="absolute z-30"
-                style={{
-                    left: (playerGridPos.x * TILE_SIZE),
-                    top: (playerGridPos.y * TILE_SIZE) - (TILE_SIZE * 0.5), // Offset slightly up for sprite height
-                    width: TILE_SIZE,
-                    height: TILE_SIZE,
-                    transition: `left ${MOVEMENT_SPEED_MS}ms linear, top ${MOVEMENT_SPEED_MS}ms linear`
-                }}
-            >
+            <div className="absolute z-30" style={{ left: (playerGridPos.x * TILE_SIZE), top: (playerGridPos.y * TILE_SIZE) - (TILE_SIZE * 0.5), width: TILE_SIZE, height: TILE_SIZE, transition: `left ${MOVEMENT_SPEED_MS}ms linear, top ${MOVEMENT_SPEED_MS}ms linear` }}>
                 {character.pixelSpriteUrl ? (
-                    <img 
-                        src={isMoving ? character.pixelSpriteUrlWalk : character.pixelSpriteUrl} 
-                        className="w-full h-full object-contain drop-shadow-lg"
-                        style={{ transform: `scaleX(${direction})` }}
-                        alt="Player"
-                    />
-                ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-end">
-                        <div className="w-10 h-16 bg-pink-500 rounded-t-lg border-2 border-white"></div>
-                    </div>
-                )}
+                    <img src={isMoving ? character.pixelSpriteUrlWalk : character.pixelSpriteUrl} className="w-full h-full object-contain drop-shadow-lg" style={{ transform: `scaleX(${direction})` }} alt="Player" />
+                ) : <div className="w-10 h-16 bg-pink-500 rounded-t-lg border-2 border-white"></div>}
             </div>
         </div>
-
-        {/* UI HUD */}
         <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
             <h1 className="text-xl text-white bg-black/60 px-4 py-2 border-l-4 border-blue-500 font-mono">
                 {character.id === CharacterId.KAGUYA ? "SECTOR 1: PROCESSING LANE" : "SECTOR 1: DECAYING FOREST"}
             </h1>
-            
             <div className="flex items-center gap-2 bg-black/60 px-4 py-2 rounded-r-lg">
-                <div className={`text-2xl ${worldType === 'INNER_WORLD' ? 'text-red-500 animate-pulse' : 'text-blue-200'}`}>
-                    {worldType === 'INNER_WORLD' ? '👁️' : '🧿'}
-                </div>
+                <div className={`text-2xl ${worldType === 'INNER_WORLD' ? 'text-red-500 animate-pulse' : 'text-blue-200'}`}>{worldType === 'INNER_WORLD' ? '👁️' : '🧿'}</div>
                 <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
-                    <div 
-                        className={`h-full transition-all duration-300 ${sanity < 30 ? 'bg-red-600' : 'bg-blue-400'}`}
-                        style={{ width: `${sanity}%` }}
-                    />
+                    <div className={`h-full transition-all duration-300 ${sanity < 30 ? 'bg-red-600' : 'bg-blue-400'}`} style={{ width: `${sanity}%` }} />
                 </div>
-            </div>
-            
-            <div className="text-xs text-gray-400 mt-1 font-mono">
-                [SPACE] LENS: {inventory.has('Obscure Lens') ? worldType : 'MISSING'}
             </div>
         </div>
-
-        {/* LOOP NOTIFICATION */}
         {loopMessage && (
             <div className="absolute top-32 left-1/2 -translate-x-1/2 z-50 animate-pulse">
-                <div className="bg-red-900/80 border-y-2 border-[#FFD700] text-[#FFD700] px-8 py-2 font-bold tracking-[0.5em] shadow-[0_0_20px_red] font-mono">
-                    {loopMessage}
-                </div>
+                <div className="bg-red-900/80 border-y-2 border-[#FFD700] text-[#FFD700] px-8 py-2 font-bold tracking-[0.5em] shadow-[0_0_20px_red] font-mono">{loopMessage}</div>
             </div>
         )}
-
-        {/* OBJECTIVE HUD */}
         <div className="absolute top-4 right-4 z-50">
             <div className="bg-black/80 border border-[#FFD700] p-3 rounded text-white min-w-[200px]">
                 <h3 className="text-[#FFD700] text-xs font-bold uppercase tracking-widest mb-1 border-b border-gray-700 pb-1">Current Protocol</h3>
@@ -392,25 +284,17 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                      <div className="mt-2 pt-2 border-t border-gray-700">
                          <div className="text-xs text-gray-500">CACHE:</div>
                          <div className="flex gap-1 flex-wrap mt-1">
-                             {Array.from(inventory).map((item, i) => (
-                                 <span key={i} className="text-xs bg-blue-900/50 px-1 border border-blue-500 rounded font-mono">{item}</span>
-                             ))}
+                             {Array.from(inventory).map((item, i) => <span key={i} className="text-xs bg-blue-900/50 px-1 border border-blue-500 rounded font-mono">{item}</span>)}
                          </div>
                      </div>
                 )}
             </div>
         </div>
-
-        {/* INTERACT PROMPT */}
         {interactionTarget && !dialogue && (
             <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 animate-bounce">
-                <div className="bg-white text-black px-6 py-2 font-bold rounded-full shadow-[0_0_20px_white] flex items-center gap-2">
-                   <span>⚡</span> Z / ENTER
-                </div>
+                <div className="bg-white text-black px-6 py-2 font-bold rounded-full shadow-[0_0_20px_white] flex items-center gap-2"><span>⚡</span> Z / ENTER</div>
             </div>
         )}
-
-        {/* DIALOGUE BOX */}
         {dialogue && (
             <div className="absolute inset-x-0 bottom-0 min-h-[250px] bg-gradient-to-t from-black via-black/95 to-transparent z-[60] flex flex-col items-center justify-end pb-10">
                 <div className="w-full max-w-4xl bg-[#1a0505] border-t-2 border-[#FFD700] p-6 shadow-2xl animate-slide-up flex gap-6">
@@ -420,35 +304,17 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                     <div className="flex-1 flex flex-col">
                         <h3 className="text-[#FFD700] text-lg mb-2 font-bold tracking-wider font-mono">{dialogue.title}</h3>
                         <p className="text-white text-xl leading-relaxed font-serif">{dialogue.text}</p>
-                        
-                        <div className="mt-auto flex justify-end pt-4">
-                             <div className="text-gray-400 text-sm animate-pulse">[Press Z to Continue]</div>
-                        </div>
+                        <div className="mt-auto flex justify-end pt-4"><div className="text-gray-400 text-sm animate-pulse">[Press Z to Continue]</div></div>
                     </div>
                 </div>
             </div>
         )}
-
-        {/* TELEPORT FLASH EFFECT */}
-        <div 
-            className="absolute inset-0 bg-white pointer-events-none z-[100] transition-opacity duration-300"
-            style={{ opacity: flashOpacity }}
-        />
-
-        {/* FULL SCREEN LENS EFFECT */}
-        <div className={`absolute inset-0 pointer-events-none transition-all duration-700 z-40
-            ${worldType === 'INNER_WORLD' 
-                ? 'shadow-[inset_0_0_100px_rgba(255,0,0,0.5)] backdrop-contrast-125 backdrop-hue-rotate-15' 
-                : 'shadow-[inset_0_0_150px_rgba(0,0,0,0.8)] backdrop-grayscale-[0.3]'
-            }
-        `} />
-        
-        {/* NOISE EFFECT FOR INNER WORLD */}
+        <div className="absolute inset-0 bg-white pointer-events-none z-[100] transition-opacity duration-300" style={{ opacity: flashOpacity }} />
+        <div className={`absolute inset-0 pointer-events-none transition-all duration-700 z-40 ${worldType === 'INNER_WORLD' ? 'shadow-[inset_0_0_100px_rgba(255,0,0,0.5)] backdrop-contrast-125 backdrop-hue-rotate-15' : 'shadow-[inset_0_0_150px_rgba(0,0,0,0.8)] backdrop-grayscale-[0.3]'}`} />
         {worldType === 'INNER_WORLD' && (
              <div className="absolute inset-0 z-30 pointer-events-none opacity-10 mix-blend-overlay" style={{backgroundImage: 'url(https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif)', backgroundSize: 'cover'}}></div>
         )}
     </div>
   );
 };
-
 export default Exploration;

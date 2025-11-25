@@ -9,10 +9,20 @@ import {
     connectFileSystem, 
     isFileSystemConnected, 
     saveAssetToFS, 
-    downloadAssetLegacy, 
     loadAssetFromFS, 
     AssetType 
 } from './services/assetStorage';
+
+// Helper to prevent infinite loading screens
+const withTimeout = <T,>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+    return Promise.race([
+        promise,
+        new Promise<T>((resolve) => setTimeout(() => {
+            console.warn(`[App] Operation timed out after ${ms}ms`);
+            resolve(fallback);
+        }, ms))
+    ]);
+};
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
@@ -41,20 +51,27 @@ const App: React.FC = () => {
   // --- Asset Logic ---
 
   const fetchAsset = async (id: string, name: string, desc: string, type: AssetType, visualPrompt?: string) => {
+    // 1. Try Local FS first
     if (hasFsAccess) {
         const fsUrl = await loadAssetFromFS(id, type);
         if (fsUrl) return { url: fsUrl, isLocal: true };
     }
-    const result = await getOrGenerateAsset(id, name, desc, type, visualPrompt);
+    
+    // 2. Generate with Timeout (15s max)
+    const result = await withTimeout(
+        getOrGenerateAsset(id, name, desc, type, visualPrompt),
+        15000, 
+        null
+    );
 
+    // 3. Save if successful and FS connected
     if (result && !result.isLocal && hasFsAccess) {
         try {
-            setLoadingStatus(`Writing to Reality Layer: ${name}...`);
-            const success = await saveAssetToFS(id, type, result.url);
-            if (success) {
-                console.log(`[App] Saved ${name} to ${type} folder.`);
-                return { url: result.url, isLocal: true };
-            }
+            // Don't block UI for saving, do it in background
+            saveAssetToFS(id, type, result.url).then(success => {
+                if (success) console.log(`[App] Background saved ${name}`);
+            });
+            return { url: result.url, isLocal: true };
         } catch (e) { console.error("Auto-save failed", e); }
     }
     return result;
@@ -63,12 +80,10 @@ const App: React.FC = () => {
   const updateAssetRecord = (id: string, type: AssetType, result: { url: string, isLocal: boolean }) => {
       setLoadedAssets(prev => {
           const next = { ...prev };
-          
           if (type === 'portrait') next.portraits = { ...prev.portraits, [id]: result };
           else if (type === 'background') next.backgrounds = { ...prev.backgrounds, [id]: result };
           else if (type === 'sprite') {
               next.sprites = { ...prev.sprites, [id]: result };
-              
               // Sort into sub-categories for easier lookup
               const isChar = Object.values(CharacterId).includes(id as any);
               if (!isChar) {
@@ -86,8 +101,10 @@ const App: React.FC = () => {
   const loadCharacterAssets = async (charId: CharacterId) => {
     const char = CHARACTERS[charId];
     setLoadingStatus(`Awakening ${char.name}...`);
+    
     const sprite = await fetchAsset(char.id, char.name, char.description, 'sprite', char.visualPrompt);
     if (sprite) updateAssetRecord(char.id, 'sprite', sprite);
+    
     const portrait = await fetchAsset(char.id, char.name, char.description, 'portrait', char.visualPrompt);
     if (portrait) updateAssetRecord(char.id, 'portrait', portrait);
     
@@ -103,130 +120,77 @@ const App: React.FC = () => {
     );
     if (bg) updateAssetRecord(`${scenario.id}_MAP`, 'background', bg);
 
-    // Load Stage Props (New)
+    // Load Stage Props
     if (charId === CharacterId.KAGUYA) {
         setLoadingStatus("Generating Cyberpunk Props...");
-        
-        // 1. Asset Tree
-        const tree = await fetchAsset(
-            'PROP_ASSET_TREE', 
-            'Asset Tree', 
-            'A tree with a barcode.', 
-            'sprite', 
-            'Object on transparent background. Pixel art cyberpunk tree, dead branches, glowing digital barcode tag attached to trunk. High contrast, neon green accents. Transparent background.'
-        );
-        if (tree) updateAssetRecord('PROP_ASSET_TREE', 'sprite', tree);
+        const propList = [
+            { id: 'PROP_ASSET_TREE', name: 'Asset Tree', desc: 'A tree with a barcode.', prompt: 'Object on transparent background. Pixel art cyberpunk tree...' },
+            { id: 'PROP_GOHEI', name: 'Gohei Barrier', desc: 'A shinto wand used as a fence.', prompt: 'Object on transparent background. Pixel art Shinto Gohei wand...' },
+            { id: 'PROP_DIGITAL_TORII', name: 'Digital Torii', desc: 'A cyberpunk Torii gate.', prompt: 'Object on transparent background. Large pixel art Torii gate...' },
+            { id: 'PROP_SHRINE_OFFICE', name: 'Admin Shrine Desk', desc: 'A massive shrine altar converted into a desk.', prompt: 'Object on transparent background. Huge pixel art structure...' },
+            { id: 'PROP_SHREDDER', name: 'Donation Shredder', desc: 'A donation box that is a shredder.', prompt: 'Object on transparent background. Pixel art wooden offertory box...' },
+            { id: 'PROP_REIMU_WORK', name: 'Working Reimu', desc: 'Reimu typing at a desk.', prompt: 'Character on transparent background. Pixel art Reimu Hakurei sitting at a desk...' }
+        ];
 
-        // 2. Gohei Barrier
-        const gohei = await fetchAsset(
-            'PROP_GOHEI',
-            'Gohei Barrier',
-            'A shinto wand used as a fence.',
-            'sprite',
-            'Object on transparent background. Pixel art Shinto Gohei wand stuck in the ground vertically. The paper streamers are glowing neon red. Cyberpunk style. Transparent background.'
-        );
-        if (gohei) updateAssetRecord('PROP_GOHEI', 'sprite', gohei);
+        for (const p of propList) {
+             const asset = await fetchAsset(p.id, p.name, p.desc, 'sprite', p.prompt);
+             if (asset) updateAssetRecord(p.id, 'sprite', asset);
+        }
 
-        // 3. Digital Torii
-        const torii = await fetchAsset(
-            'PROP_DIGITAL_TORII',
-            'Digital Torii',
-            'A cyberpunk Torii gate.',
-            'sprite',
-            'Object on transparent background. Large pixel art Torii gate made of metallic server racks and glowing blue neon lights. High tech, sci-fi Shinto style. Front view. Transparent background.'
-        );
-        if (torii) updateAssetRecord('PROP_DIGITAL_TORII', 'sprite', torii);
-
-        // 4. Shrine Office Desk
-        const shrine = await fetchAsset(
-            'PROP_SHRINE_OFFICE',
-            'Admin Shrine Desk',
-            'A massive shrine altar converted into a desk.',
-            'sprite',
-            'Object on transparent background. Huge pixel art structure: A traditional Shinto shrine roof, but the building is a giant high-tech computer desk. Multiple monitors, stacks of paper towers, server cables draped like shimenawa ropes. Cyberpunk office shrine. Transparent background.'
-        );
-        if (shrine) updateAssetRecord('PROP_SHRINE_OFFICE', 'sprite', shrine);
-
-        // 5. Shredder Box
-        const shredder = await fetchAsset(
-            'PROP_SHREDDER',
-            'Donation Shredder',
-            'A donation box that is a shredder.',
-            'sprite',
-            'Object on transparent background. Pixel art wooden offertory box (saisen-bako) modified with mechanical gears and a paper shredder slot on top. Cyberpunk style. Transparent background.'
-        );
-        if (shredder) updateAssetRecord('PROP_SHREDDER', 'sprite', shredder);
-
-        // 6. Working Reimu
-        const reimuWork = await fetchAsset(
-            'PROP_REIMU_WORK',
-            'Working Reimu',
-            'Reimu typing at a desk.',
-            'sprite',
-            'Character on transparent background. Pixel art Reimu Hakurei sitting at a desk, typing furiously on a mechanical keyboard. She looks exhausted, bags under eyes. Anime RPG style top-down. Transparent background.'
-        );
-        if (reimuWork) updateAssetRecord('PROP_REIMU_WORK', 'sprite', reimuWork);
-        
-        // 7. Boss Tunnel Background
+        // PRELOAD Stage 1 Boss BG for Kaguya
         setLoadingStatus("Generating Admin Tunnel...");
         const bossBg = await fetchAsset(
             'STAGE1_BOSS_BG',
             'Bureaucratic Tunnel',
             'A scrolling tunnel of paperwork.',
             'background',
-            'Anime background art. A futuristic cyber-tunnel lined with millions of flying papers, red "ERROR" windows, and glowing fiber optic cables. High speed motion blur. Dark blue and red color scheme. Oppressive atmosphere.'
+            'Anime background art. A futuristic cyber-tunnel lined with millions of flying papers, red "ERROR" windows, and glowing fiber optic cables. High speed motion blur.'
         );
         if (bossBg) updateAssetRecord('STAGE1_BOSS_BG', 'background', bossBg);
 
     } else if (charId === CharacterId.MOKOU) {
          setLoadingStatus("Generating Bamboo Nightmare...");
-
-         // 1. Burnt Bamboo
-         const bamboo = await fetchAsset(
-            'PROP_BAMBOO_TREE',
-            'Burnt Bamboo',
-            'A burnt bamboo stalk.',
-            'sprite',
-            'Object on transparent background. Pixel art single bamboo stalk, charred black and glowing with embers. Cyberpunk glitch effects. Transparent background.'
-         );
-         if (bamboo) updateAssetRecord('PROP_BAMBOO_TREE', 'sprite', bamboo);
-
-         // 2. Depressed Marisa
-         const marisa = await fetchAsset(
-             'PROP_MARISA_SAD',
-             'Depressed Marisa',
-             'Marisa sitting on the ground.',
-             'sprite',
-             'Character on transparent background. Pixel art Marisa Kirisame sitting on the ground hugging her knees. She looks sad and tired. Her witch hat is on the ground next to her. Anime RPG style. Transparent background.'
-         );
-         if (marisa) updateAssetRecord('PROP_MARISA_SAD', 'sprite', marisa);
+         const propList = [
+            { id: 'PROP_BAMBOO_TREE', name: 'Burnt Bamboo', desc: 'A burnt bamboo stalk.', prompt: 'Object on transparent background. Pixel art single bamboo stalk...' },
+            { id: 'PROP_MARISA_SAD', name: 'Depressed Marisa', desc: 'Marisa sitting on the ground.', prompt: 'Character on transparent background. Pixel art Marisa Kirisame sitting...' }
+         ];
+         for (const p of propList) {
+            const asset = await fetchAsset(p.id, p.name, p.desc, 'sprite', p.prompt);
+            if (asset) updateAssetRecord(p.id, 'sprite', asset);
+        }
     }
 
     setLoadingStatus(null);
   };
 
   const loadEnemyAssets = async (enemy: Enemy) => {
-      setLoadingStatus(`Manifesting Boss: ${enemy.name}...`);
-      const sprite = await fetchAsset(enemy.name, enemy.name, enemy.description, 'sprite', enemy.visualPrompt);
-      if (sprite) updateAssetRecord(enemy.name, 'sprite', sprite);
+      try {
+          setLoadingStatus(`Manifesting Boss: ${enemy.name}...`);
+          
+          // 1. Sprite
+          const sprite = await fetchAsset(enemy.name, enemy.name, enemy.description, 'sprite', enemy.visualPrompt);
+          if (sprite) updateAssetRecord(enemy.name, 'sprite', sprite);
 
-      // If it's Stage 1 Reimu, use the special Boss BG we preloaded
-      if (enemy.name.includes("Reimu")) {
-           // Should already be in loadedAssets from loadCharacterAssets if Kaguya
-           // But if it's dynamic encounter, we check
-           if (!loadedAssets.backgrounds['STAGE1_BOSS_BG']) {
-                const bg = await fetchAsset(
-                    'STAGE1_BOSS_BG', 'Bureaucratic Tunnel', 'Tunnel of paperwork', 'background',
-                    'Anime background art. A futuristic cyber-tunnel lined with millions of flying papers, red "ERROR" windows, and glowing fiber optic cables. High speed motion blur.'
-                );
-                if (bg) updateAssetRecord('STAGE1_BOSS_BG', 'background', bg);
-           }
-      } else {
-          const bgPrompt = enemy.visualPrompt ? `${enemy.visualPrompt} (Atmospheric Background)` : enemy.description;
-          const bg = await fetchAsset(`${enemy.name}_BG`, `${enemy.name} Location`, bgPrompt, 'background', bgPrompt);
-          if (bg) updateAssetRecord(`${enemy.name}_BG`, 'background', bg);
+          // 2. Background
+          // If it's Stage 1 Reimu, use the special Boss BG we preloaded or fetch it now
+          if (enemy.name.includes("Reimu")) {
+               if (!loadedAssets.backgrounds['STAGE1_BOSS_BG']) {
+                    const bg = await fetchAsset(
+                        'STAGE1_BOSS_BG', 'Bureaucratic Tunnel', 'Tunnel of paperwork', 'background',
+                        'Anime background art. A futuristic cyber-tunnel lined with millions of flying papers, red "ERROR" windows, and glowing fiber optic cables. High speed motion blur.'
+                    );
+                    if (bg) updateAssetRecord('STAGE1_BOSS_BG', 'background', bg);
+               }
+          } else {
+              const bgPrompt = enemy.visualPrompt ? `${enemy.visualPrompt} (Atmospheric Background)` : enemy.description;
+              const bg = await fetchAsset(`${enemy.name}_BG`, `${enemy.name} Location`, bgPrompt, 'background', bgPrompt);
+              if (bg) updateAssetRecord(`${enemy.name}_BG`, 'background', bg);
+          }
+      } catch (error) {
+          console.error("Critical error loading enemy assets:", error);
+      } finally {
+          setLoadingStatus(null);
       }
-      setLoadingStatus(null);
   };
 
   const handleFileSystemConnect = async () => {
@@ -241,40 +205,32 @@ const App: React.FC = () => {
     const scenario = SCENARIOS[id];
     setCurrentScenario(scenario);
     
-    // ASSET CHECK LOGIC
-    const basicAssetsLoaded = loadedAssets.sprites[id] && loadedAssets.portraits[id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
-    
-    let propsLoaded = true;
+    // Check if critical assets are ready
+    const basicReady = loadedAssets.sprites[id] && loadedAssets.portraits[id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
+    let propsReady = true;
     if (id === CharacterId.KAGUYA) {
-        // Strict check for ALL props to force generation
-        propsLoaded = !!(
-            loadedAssets.props['PROP_ASSET_TREE'] && 
-            loadedAssets.props['PROP_GOHEI'] && 
-            loadedAssets.props['PROP_DIGITAL_TORII'] &&
-            loadedAssets.props['PROP_SHRINE_OFFICE'] &&
-            loadedAssets.props['PROP_SHREDDER'] &&
-            loadedAssets.props['PROP_REIMU_WORK'] &&
-            loadedAssets.backgrounds['STAGE1_BOSS_BG'] // Ensure boss BG is ready
-        );
+        propsReady = !!(loadedAssets.props['PROP_ASSET_TREE'] && loadedAssets.props['PROP_SHRINE_OFFICE']);
     } else if (id === CharacterId.MOKOU) {
-         propsLoaded = !!(
-            loadedAssets.props['PROP_BAMBOO_TREE'] &&
-            loadedAssets.props['PROP_MARISA_SAD']
-        );
+         propsReady = !!(loadedAssets.props['PROP_BAMBOO_TREE']);
     }
-    const isReady = basicAssetsLoaded && propsLoaded;
 
-    // ... (rest of function same as before, simplified logic for update)
-    if (!isReady) {
+    if (!basicReady || !propsReady) {
         await loadCharacterAssets(id);
     }
     setGameState(GameState.EXPLORATION);
   };
 
   const handleEncounter = async (enemy: Enemy) => {
-    setActiveEnemy(enemy);
+    if (loadingStatus) return; // Prevent double trigger
+    
+    setLoadingStatus(`Encounter initiated: ${enemy.name}`);
+    
+    // Wait for assets to ensure background is ready before switching state
     await loadEnemyAssets(enemy);
+    
+    setActiveEnemy(enemy);
     setGameState(GameState.BATTLE);
+    setLoadingStatus(null);
   };
 
   const handleVictory = () => setGameState(GameState.VICTORY);
@@ -292,10 +248,13 @@ const App: React.FC = () => {
 
   const getCurrentEnemy = (): Enemy | null => {
       if (!activeEnemy) return null;
-      // Special override for Reimu BG
       let bgUrl = loadedAssets.backgrounds[activeEnemy.name]?.url || '';
+      
+      // Override for Reimu
       if (activeEnemy.name.includes('Reimu') && loadedAssets.backgrounds['STAGE1_BOSS_BG']) {
           bgUrl = loadedAssets.backgrounds['STAGE1_BOSS_BG'].url;
+      } else if (!bgUrl && loadedAssets.backgrounds[`${activeEnemy.name}_BG`]) {
+          bgUrl = loadedAssets.backgrounds[`${activeEnemy.name}_BG`].url;
       }
 
       return {
@@ -305,7 +264,6 @@ const App: React.FC = () => {
       };
   };
 
-  // Convert props record to simple string map for stage component
   const getPropSprites = () => {
       const result: Record<string, string> = {};
       Object.entries(loadedAssets.props).forEach(([key, val]) => {
@@ -332,7 +290,6 @@ const App: React.FC = () => {
         return (
           <div className="flex flex-col items-center justify-center min-h-screen bg-[#0B0B3B] text-white p-4 overflow-y-auto bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]">
             <div className="max-w-6xl w-full flex flex-col items-center relative z-10">
-                {/* Title */}
                 <div className="mb-12 text-center">
                      <h1 className="text-5xl md:text-7xl font-serif mb-2 text-transparent bg-clip-text bg-gradient-to-b from-[#E0E0E6] to-[#7B7B8B] tracking-widest drop-shadow-[0_0_20px_rgba(224,224,230,0.4)]">
                         東方虚鏡抄
@@ -340,10 +297,8 @@ const App: React.FC = () => {
                      <h2 className="text-xl md:text-3xl text-[#FFD700] font-serif tracking-[0.2em] mb-6 uppercase opacity-80">
                         Reflection of Eternal Spirality
                      </h2>
-                     <div className="w-32 h-1 bg-gradient-to-r from-transparent via-[#FFD700] to-transparent mx-auto"></div>
                 </div>
                 
-                {/* Connection Status */}
                 <div className="mb-12">
                     {!hasFsAccess ? (
                         <button 
@@ -359,32 +314,10 @@ const App: React.FC = () => {
                     )}
                 </div>
                 
-                {/* Character Selection */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-16 w-full max-w-5xl px-8">
                 {Object.values(CHARACTERS).map((char) => {
                     const isKaguya = char.id === CharacterId.KAGUYA;
                     const scenario = SCENARIOS[char.id];
-                    
-                    const basicReady = loadedAssets.sprites[char.id] && loadedAssets.portraits[char.id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
-                    let propsReady = true;
-                    if (isKaguya) {
-                        propsReady = !!(
-                            loadedAssets.props['PROP_ASSET_TREE'] && 
-                            loadedAssets.props['PROP_GOHEI'] && 
-                            loadedAssets.props['PROP_DIGITAL_TORII'] &&
-                            loadedAssets.props['PROP_SHRINE_OFFICE'] &&
-                            loadedAssets.props['PROP_SHREDDER'] &&
-                            loadedAssets.props['PROP_REIMU_WORK'] &&
-                            loadedAssets.backgrounds['STAGE1_BOSS_BG']
-                        );
-                    } else if (char.id === CharacterId.MOKOU) {
-                         propsReady = !!(
-                            loadedAssets.props['PROP_BAMBOO_TREE'] &&
-                            loadedAssets.props['PROP_MARISA_SAD']
-                        );
-                    }
-                    const isReady = basicReady && propsReady;
-
                     return (
                     <div 
                         key={char.id}
@@ -396,40 +329,20 @@ const App: React.FC = () => {
                             }
                         `}
                     >
-                        {/* Scenario Title */}
                         <div className="absolute top-4 left-4 text-xs tracking-[0.3em] opacity-50 font-bold">
                             {isKaguya ? 'ROUTE A' : 'ROUTE B'}
                         </div>
-
                         <h2 className={`text-3xl font-serif mt-6 mb-2 ${isKaguya ? 'text-blue-200' : 'text-red-200'}`}>
                             {scenario.title}
                         </h2>
-                        <p className="text-sm text-gray-400 font-serif italic mb-8">"{scenario.subtitle}"</p>
-                        
-                        {/* Portrait Preview Box */}
-                        <div className={`w-full aspect-square border ${isKaguya ? 'border-blue-900' : 'border-red-900'} bg-black/50 mb-6 relative flex items-center justify-center group-hover:scale-[1.02] transition-transform duration-500`}>
+                        <div className={`w-full aspect-square border ${isKaguya ? 'border-blue-900' : 'border-red-900'} bg-black/50 mb-6 relative flex items-center justify-center`}>
                              {loadedAssets.portraits[char.id] ? (
-                                 <img src={loadedAssets.portraits[char.id].url} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt={char.name} />
-                             ) : (
-                                 <span className="text-4xl opacity-20">?</span>
-                             )}
+                                 <img src={loadedAssets.portraits[char.id].url} className="w-full h-full object-cover opacity-80" alt={char.name} />
+                             ) : <span className="text-4xl opacity-20">?</span>}
                         </div>
-
-                        {/* Description */}
-                        <p className="text-xs text-gray-400 leading-relaxed h-16">
-                            {scenario.description}
-                        </p>
-
-                        {/* Button */}
-                        <div className={`mt-6 py-3 text-center text-xs font-bold tracking-[0.2em] border transition-all
-                            ${isReady 
-                                ? (isKaguya ? 'bg-blue-900/30 border-blue-500 text-blue-200' : 'bg-red-900/30 border-red-500 text-red-200')
-                                : 'border-gray-700 text-gray-500'
-                            }
-                        `}>
-                            {isReady ? 'START GAME' : 'GENERATE ASSETS'}
+                        <div className="mt-6 py-3 text-center text-xs font-bold tracking-[0.2em] border border-gray-700 text-gray-400 group-hover:bg-white/10">
+                            START GAME
                         </div>
-
                     </div>
                 )})}
                 </div>
@@ -450,52 +363,29 @@ const App: React.FC = () => {
 
       case GameState.BATTLE:
         if (!activeEnemy) return null;
-        const fullEnemy = getCurrentEnemy();
-        if (!fullEnemy) return <div>Preparing Battle...</div>;
-
         return (
           <DanmakuBattle
             character={getCurrentCharacter()}
-            enemy={fullEnemy}
+            enemy={getCurrentEnemy()!}
             onVictory={handleVictory}
             onDefeat={handleDefeat}
           />
         );
 
       case GameState.VICTORY:
-        return (
-          <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white text-center relative overflow-hidden font-serif">
-            <div className="absolute inset-0 bg-blue-900/20"></div>
-            <h1 className="text-6xl text-[#FFD700] mb-4 animate-pulse relative z-10 drop-shadow-[0_0_10px_gold] tracking-widest">
-                PHANTASM CLEARED
-            </h1>
-            <div className="relative z-10 max-w-2xl p-8 border-y-2 border-[#FFD700] bg-black/80">
-                <p className="text-xl italic text-gray-300 mb-8">
-                    "{activeEnemy?.flavorText}"
-                </p>
-                <button 
-                    onClick={() => setGameState(GameState.EXPLORATION)}
-                    className="px-12 py-3 bg-[#FFD700] text-black font-bold tracking-widest hover:bg-white transition-all"
-                >
-                    CONTINUE JOURNEY
-                </button>
-            </div>
-          </div>
-        );
-
       case GameState.GAME_OVER:
         return (
-          <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white relative">
-            <div className="text-red-900/20 text-[250px] font-serif absolute select-none pointer-events-none top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">滅</div>
-            <h1 className="text-5xl text-red-600 font-serif mb-2 tracking-[0.5em] z-10">GAME OVER</h1>
-            <div className="mb-12 text-gray-500 font-serif italic z-10">The mirror remains unbroken...</div>
-            <button 
-              onClick={() => setGameState(GameState.MENU)}
-              className="px-12 py-4 border border-red-800 text-red-500 hover:bg-red-900/30 hover:border-red-400 hover:text-red-200 transition-all z-10 tracking-widest text-sm"
-            >
-              RETURN TO TITLE
-            </button>
-          </div>
+            <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white relative font-serif">
+                <h1 className={`text-6xl mb-8 tracking-[0.2em] ${gameState === GameState.VICTORY ? 'text-yellow-500' : 'text-red-600'}`}>
+                    {gameState === GameState.VICTORY ? 'PHANTASM CLEARED' : 'GAME OVER'}
+                </h1>
+                <button 
+                  onClick={() => setGameState(GameState.MENU)}
+                  className="px-8 py-3 border border-white/50 hover:bg-white hover:text-black transition-colors"
+                >
+                  RETURN TO TITLE
+                </button>
+            </div>
         );
         
       default:
