@@ -19,7 +19,7 @@ export const getOrGenerateAsset = async (
   try {
     // Custom API Configuration
     const API_URL = "https://new.12ai.org";
-    const MODEL = "gemini-3-pro-image-preview";
+    const MODEL = "gemini-2.5-flash-image";
     const API_KEY = process.env.API_KEY;
 
     if (!API_KEY) {
