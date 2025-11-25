@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import Exploration from './components/Exploration';
 import DanmakuBattle from './components/DanmakuBattle';
@@ -118,8 +119,13 @@ const App: React.FC = () => {
     const char = CHARACTERS[charId];
     setLoadingStatus(`Awakening ${char.name}...`);
     
-    const sprite = await fetchAsset(char.id, char.name, char.description, 'sprite', char.visualPrompt);
-    if (sprite) updateAssetRecord(char.id, 'sprite', sprite);
+    // Request 3x3 Sprite Sheet for Animation
+    // We use a new ID suffix to distinguish from old single sprites
+    const spriteId = `${char.id}_SHEET_3x3`;
+    const spritePrompt = `${char.visualPrompt} GRID_3x3`; 
+
+    const sprite = await fetchAsset(spriteId, char.name, char.description, 'sprite', spritePrompt);
+    if (sprite) updateAssetRecord(spriteId, 'sprite', sprite);
     
     const portrait = await fetchAsset(char.id, char.name, char.description, 'portrait', char.visualPrompt);
     if (portrait) updateAssetRecord(char.id, 'portrait', portrait);
@@ -154,7 +160,6 @@ const App: React.FC = () => {
         }
 
         // PRELOAD Stage 1 Boss BG for Kaguya
-        // We explicitly ask for STAGE1_BOSS_BG. If on local FS, it loads the file. If not, generates.
         setLoadingStatus("Generating Admin Tunnel...");
         const bossBg = await fetchAsset(
             'STAGE1_BOSS_BG',
@@ -253,7 +258,9 @@ const App: React.FC = () => {
     const scenario = SCENARIOS[id];
     setCurrentScenario(scenario);
     
-    const basicReady = loadedAssets.sprites[id] && loadedAssets.portraits[id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
+    // Check for Sprite Sheet Existence
+    const sheetId = `${id}_SHEET_3x3`;
+    const basicReady = loadedAssets.sprites[sheetId] && loadedAssets.portraits[id] && loadedAssets.backgrounds[`${scenario.id}_MAP`];
     let propsReady = true;
     if (id === CharacterId.KAGUYA) {
         propsReady = !!(loadedAssets.props['PROP_ASSET_TREE'] && loadedAssets.props['PROP_SHRINE_OFFICE']);
@@ -323,11 +330,15 @@ const App: React.FC = () => {
 
   const getCurrentCharacter = (): Character => {
       const base = CHARACTERS[selectedCharId];
+      // Lookup the Sheet ID
+      const sheetId = `${selectedCharId}_SHEET_3x3`;
       return {
           ...base,
-          pixelSpriteUrl: loadedAssets.sprites[selectedCharId]?.url || FALLBACK_SPRITE,
-          pixelSpriteUrlWalk: loadedAssets.sprites[selectedCharId]?.url || FALLBACK_SPRITE, 
-          portraitUrl: loadedAssets.portraits[selectedCharId]?.url || FALLBACK_SPRITE
+          // Use the Sheet URL if available, otherwise fallback
+          pixelSpriteUrl: loadedAssets.sprites[sheetId]?.url || loadedAssets.sprites[selectedCharId]?.url || FALLBACK_SPRITE,
+          pixelSpriteUrlWalk: '', // Deprecated in favor of sheet
+          portraitUrl: loadedAssets.portraits[selectedCharId]?.url || FALLBACK_SPRITE,
+          spriteSheetType: loadedAssets.sprites[sheetId] ? 'GRID_3x3' : 'SINGLE'
       };
   };
 

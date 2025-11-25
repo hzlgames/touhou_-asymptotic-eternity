@@ -1,4 +1,5 @@
 
+
 import { AssetType, AssetResult } from "./assetStorage";
 import { removeBackground } from "../utils/imageProcessing";
 
@@ -33,12 +34,26 @@ export const getOrGenerateAsset = async (
     const baseDesc = visualPrompt ? visualPrompt : `${name}. ${description}`;
 
     if (type === 'sprite') {
-        prompt = `A high-quality pixel art sprite of ${baseDesc}. 
-        Chibi anime style, full body, standing straight, facing forward, isolated.
-        CRITICAL: The background MUST be a SOLID BRIGHT GREEN COLOR (Hex #00FF00). 
-        Do not add shadows or ground effects. 
-        Style: Retro 32-bit RPG style, clean outlines. Resolution: 256x256.`;
-        aspectRatio = "1:1";
+        // DETECT GRID REQUEST
+        if (visualPrompt?.includes('GRID_3x3')) {
+            prompt = `A pixel art sprite sheet of ${name}. 
+            LAYOUT: 3x3 Grid.
+            CONTENT: 
+            - Top Row: Walking Forward (Front View) - 3 Frames.
+            - Middle Row: Walking Side (Side View) - 3 Frames.
+            - Bottom Row: Walking Away (Back View) - 3 Frames.
+            STYLE: Retro 32-bit RPG style. Chibi anime.
+            BACKGROUND: Solid Green (#00FF00).
+            ${baseDesc}`;
+            aspectRatio = "1:1";
+        } else {
+            prompt = `A high-quality pixel art sprite of ${baseDesc}. 
+            Chibi anime style, full body, standing straight, facing forward, isolated.
+            CRITICAL: The background MUST be a SOLID BRIGHT GREEN COLOR (Hex #00FF00). 
+            Do not add shadows or ground effects. 
+            Style: Retro 32-bit RPG style, clean outlines. Resolution: 256x256.`;
+            aspectRatio = "1:1";
+        }
         needsBackgroundRemoval = true;
     } else if (type === 'portrait') {
         prompt = `A high-quality anime character portrait (Tachie) of ${baseDesc}.

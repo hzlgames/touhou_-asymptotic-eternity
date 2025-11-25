@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Character, CharacterId, Enemy, MapData, MapEntity, TileType, WorldType, SaveData } from '../types';
 import Stage1Eientei, { getStage1Data, TILE_SIZE } from './stages/Stage1Eientei';
@@ -15,7 +16,7 @@ interface ExplorationProps {
   initialState?: SaveData;
 }
 
-const MOVEMENT_SPEED_MS = 200;
+const MOVEMENT_SPEED_MS = 160;
 
 const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, onEncounter, onSave, onQuit, propSprites, initialState }) => {
   // Init State from SaveData if available
@@ -27,7 +28,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [isMoving, setIsMoving] = useState(false);
-  const [direction, setDirection] = useState(1);
+  const [direction, setDirection] = useState(1); // 1 = Right, -1 = Left (Flipped)
+  const [moveDir, setMoveDir] = useState<'UP'|'DOWN'|'SIDE'>('DOWN'); // For row selection in 3x3 sheet
+  
+  const [animFrame, setAnimFrame] = useState(0); // 0, 1, 2 for walking cycle
+
   const [interactionTarget, setInteractionTarget] = useState<MapEntity | null>(null);
   const [dialogue, setDialogue] = useState<{title: string, text: string, choices?: string[]} | null>(null);
   const [flashOpacity, setFlashOpacity] = useState(0); 
@@ -44,7 +49,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   const [encounterTriggered, setEncounterTriggered] = useState(false);
 
   // --- REFS FOR STABLE INPUT HANDLING ---
-  // We use refs to access the latest state inside the 'keydown' listener without re-binding it.
   const stateRef = useRef({
       isPaused,
       showItemMenu,
@@ -97,14 +101,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   useEffect(() => {
     const data = loadMap();
     setMapData(data);
-    // Only set spawn point if we are at 0,0 AND we didn't load a save
     if (playerGridPos.x === 0 && playerGridPos.y === 0 && !initialState) {
         setPlayerGridPos(data.spawnPoint);
     }
-  }, [loadMap]); // Dependent on map loaders
+  }, [loadMap]);
 
-  // Helper to create current state snapshot
-  // Defined HERE so handlers can use it
   const createSnapshot = (): SaveData => ({
       characterId: character.id,
       playerGridPos,
@@ -115,8 +116,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       timestamp: Date.now()
   });
 
-  // --- HANDLER DEFINITIONS ---
-  // Defined in component scope to access current state/props
   const handleDialogueAdvance = () => {
     if (!dialogue) return;
     
@@ -163,12 +162,10 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
       if (entity.onInteract) entity.onInteract(helpers);
   };
 
-  // --- HANDLERS REF ---
-  // Store latest handlers in a ref so the stable keydown listener can call the fresh versions
   const handlersRef = useRef({ handleDialogueAdvance, handleInteraction });
   useEffect(() => {
     handlersRef.current = { handleDialogueAdvance, handleInteraction };
-  }); // Update on every render
+  });
 
   // --- STABLE INPUT LISTENER ---
   useEffect(() => {
@@ -176,7 +173,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           keysRef.current[e.key] = true;
           const s = stateRef.current;
 
-          // TAB Handling (Pause)
           if (e.key === 'Tab') {
               e.preventDefault(); 
               e.stopPropagation();
@@ -189,8 +185,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
               return;
           }
 
-          if (s.isPaused) return; // Block other inputs if paused
-          
+          if (s.isPaused) return;
           if (e.key === 'F9') setDevMode(prev => !prev);
           
           if ((e.code === 'Space' || e.key === ' ') && !s.dialogue) {
@@ -202,7 +197,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           }
           
           if ((e.key === 'z' || e.key === 'Enter')) {
-               // CALL LATEST HANDLERS FROM REF
                if (s.dialogue) {
                    handlersRef.current.handleDialogueAdvance();
                } else if (s.interactionTarget) {
@@ -220,7 +214,19 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
           window.removeEventListener('keydown', handleKeyDown);
           window.removeEventListener('keyup', handleKeyUp);
       };
-  }, []); // EMPTY DEPENDENCY ARRAY ensures listeners are never re-bound
+  }, []);
+
+  // --- ANIMATION LOOP ---
+  useEffect(() => {
+      const interval = setInterval(() => {
+          if (isMoving) {
+              setAnimFrame(prev => (prev + 1) % 3);
+          } else {
+              setAnimFrame(0); // Reset to standing frame
+          }
+      }, 150);
+      return () => clearInterval(interval);
+  }, [isMoving]);
 
   // --- GAME LOOP ---
   useEffect(() => {
@@ -230,7 +236,6 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
         if (flashOpacity > 0) setFlashOpacity(prev => Math.max(0, prev - 0.1));
 
         if (worldType === WorldType.INNER_WORLD) {
-            // Disable sanity drain in Dev Mode
             if (!devMode) {
                 setSanity(prev => Math.max(0, prev - 0.05)); 
                  if (sanity <= 0) {
@@ -246,10 +251,11 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
             let dx = 0;
             let dy = 0;
 
-            if (keysRef.current['ArrowUp'] || keysRef.current['w']) dy = -1;
-            else if (keysRef.current['ArrowDown'] || keysRef.current['s']) dy = 1;
-            else if (keysRef.current['ArrowLeft'] || keysRef.current['a']) { dx = -1; setDirection(-1); }
-            else if (keysRef.current['ArrowRight'] || keysRef.current['d']) { dx = 1; setDirection(1); }
+            // Prioritize Axis?
+            if (keysRef.current['ArrowUp'] || keysRef.current['w']) { dy = -1; setMoveDir('UP'); }
+            else if (keysRef.current['ArrowDown'] || keysRef.current['s']) { dy = 1; setMoveDir('DOWN'); }
+            else if (keysRef.current['ArrowLeft'] || keysRef.current['a']) { dx = -1; setDirection(-1); setMoveDir('SIDE'); }
+            else if (keysRef.current['ArrowRight'] || keysRef.current['d']) { dx = 1; setDirection(1); setMoveDir('SIDE'); }
 
             if (dx !== 0 || dy !== 0) {
                 const nextX = playerGridPos.x + dx;
@@ -271,12 +277,8 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
   }, [mapData, playerGridPos, worldType, dialogue, interactionTarget, sanity, flashOpacity, isMoving, inventory, encounterTriggered, devMode, isPaused]);
 
   const isWalkable = (x: number, y: number, data: MapData, world: WorldType) => {
-      // Bounds check is always required
       if (x < 0 || x >= data.width || y < 0 || y >= data.height) return false;
-      
-      // Dev Mode Bypass
       if (devMode) return true;
-
       const tile = data.tiles[y]?.[x];
       const blockers = [TileType.WALL, TileType.VOID, TileType.LOCKED_DOOR, TileType.PILLAR, TileType.BOOKSHELF, TileType.FURNACE];
       if (tile === TileType.WATER) return false;
@@ -346,6 +348,56 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
 
   if (!mapData) return <div>Loading...</div>;
 
+  // --- SPRITE RENDERING LOGIC ---
+  const renderPlayerSprite = () => {
+      const isGrid = character.spriteSheetType === 'GRID_3x3';
+      
+      if (isGrid) {
+          // 3x3 Grid: 
+          // Row 0: Front (Down)
+          // Row 1: Side (Right)
+          // Row 2: Back (Up)
+          let row = 0;
+          let flip = false;
+          
+          if (moveDir === 'UP') row = 2;
+          else if (moveDir === 'DOWN') row = 0;
+          else {
+              row = 1;
+              if (direction === -1) flip = true;
+          }
+
+          // Calculate Percentage Positions
+          // 3 cols: 0%, 50%, 100%
+          // 3 rows: 0%, 50%, 100%
+          const xPos = animFrame * 50; 
+          const yPos = row * 50;
+
+          return (
+              <div 
+                  className={`w-full h-full drop-shadow-lg ${devMode ? 'opacity-50' : ''}`}
+                  style={{
+                      backgroundImage: `url(${character.pixelSpriteUrl})`,
+                      backgroundSize: '300% 300%', // 3x zoom to fit one frame
+                      backgroundPosition: `${xPos}% ${yPos}%`,
+                      transform: flip ? 'scaleX(-1)' : 'none',
+                      imageRendering: 'pixelated'
+                  }}
+              />
+          );
+      } else {
+          // Legacy Single Sprite
+          return (
+              <img 
+                  src={character.pixelSpriteUrl} 
+                  className={`w-full h-full object-contain drop-shadow-lg ${devMode ? 'opacity-50' : ''}`} 
+                  style={{ transform: `scaleX(${direction})` }} 
+                  alt="Player" 
+              />
+          );
+      }
+  };
+
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black font-serif outline-none" tabIndex={0}>
         <div className="will-change-transform transition-transform duration-300 ease-out" style={{ transform: `translate3d(${camera.x}px, ${camera.y}px, 0)` }}>
@@ -355,9 +407,7 @@ const Exploration: React.FC<ExplorationProps> = ({ character, scenarioEnemies, o
                  <Stage1Bamboo mapData={mapData} worldType={worldType} propSprites={propSprites} />
             )}
             <div className="absolute z-30" style={{ left: (playerGridPos.x * TILE_SIZE), top: (playerGridPos.y * TILE_SIZE) - (TILE_SIZE * 0.5), width: TILE_SIZE, height: TILE_SIZE, transition: `left ${devMode ? 50 : MOVEMENT_SPEED_MS}ms linear, top ${devMode ? 50 : MOVEMENT_SPEED_MS}ms linear` }}>
-                {character.pixelSpriteUrl ? (
-                    <img src={isMoving ? character.pixelSpriteUrlWalk : character.pixelSpriteUrl} className={`w-full h-full object-contain drop-shadow-lg ${devMode ? 'opacity-50' : ''}`} style={{ transform: `scaleX(${direction})` }} alt="Player" />
-                ) : <div className="w-10 h-16 bg-pink-500 rounded-t-lg border-2 border-white"></div>}
+                {renderPlayerSprite()}
             </div>
         </div>
         

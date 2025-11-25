@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Bullet, BulletType, Character, Enemy, Particle } from '../types';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../constants';
@@ -68,7 +69,8 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         iframes: 0, 
         shootTimer: 0, 
         hp: 3,
-        options: [] as PlayerOption[]
+        options: [] as PlayerOption[],
+        bank: 0 // -1 (Left), 0 (Center), 1 (Right) for banking animation
     },
     bullets: [] as Bullet[],
     particles: [] as Particle[],
@@ -373,8 +375,18 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         state.player.isFocus = isFocus;
         const moveSpeed = isFocus ? character.focusSpeed : character.speed;
         
-        if ((keys['ArrowLeft'] || keys['a']) && state.player.x > 10) state.player.x -= moveSpeed;
-        if ((keys['ArrowRight'] || keys['d']) && state.player.x < CANVAS_WIDTH - 10) state.player.x += moveSpeed;
+        // Banking Logic (Tilt)
+        let bank = 0;
+        if ((keys['ArrowLeft'] || keys['a']) && state.player.x > 10) {
+            state.player.x -= moveSpeed;
+            bank = -1;
+        }
+        if ((keys['ArrowRight'] || keys['d']) && state.player.x < CANVAS_WIDTH - 10) {
+            state.player.x += moveSpeed;
+            bank = 1;
+        }
+        state.player.bank = bank;
+
         if ((keys['ArrowUp'] || keys['w']) && state.player.y > 10 + topLimit) state.player.y -= moveSpeed;
         if ((keys['ArrowDown'] || keys['s']) && state.player.y < CANVAS_HEIGHT - 10) state.player.y += moveSpeed;
 
@@ -750,7 +762,27 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
 
                 if (playerSprite) {
                     const pSize = 48; 
-                    ctx.drawImage(playerSprite, state.player.x - pSize/2, state.player.y - pSize/2, pSize, pSize);
+                    
+                    if (character.spriteSheetType === 'GRID_3x3') {
+                        // Use Row 2 (Back View) for vertical shooter
+                        // Frame Selection:
+                        // Center (Idx 0/1/2?) - 3 cols. Center is 1.
+                        // Bank Left -> 0. Bank Right -> 2.
+                        let col = 1; // Center frame of Back View
+                        if (state.player.bank === -1) col = 0; // Left
+                        if (state.player.bank === 1) col = 2;  // Right
+
+                        const fw = playerSprite.width / 3;
+                        const fh = playerSprite.height / 3;
+                        const srcX = col * fw;
+                        const srcY = 2 * fh; // Row 2 (Back View)
+
+                        ctx.drawImage(playerSprite, srcX, srcY, fw, fh, state.player.x - pSize/2, state.player.y - pSize/2, pSize, pSize);
+
+                    } else {
+                        // Legacy single sprite
+                        ctx.drawImage(playerSprite, state.player.x - pSize/2, state.player.y - pSize/2, pSize, pSize);
+                    }
                 } else {
                     ctx.fillStyle = 'blue';
                     ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 10, 0, Math.PI*2); ctx.fill();
