@@ -14,7 +14,8 @@ export const ASSET_DIRS = {
     PORTRAITS: 'portraits',
     BACKGROUNDS: 'backgrounds',
     AUDIO: 'audio',
-    SAVES: 'saves'
+    SAVES: 'saves',
+    UI: 'DanmakuUI' // New Directory for UI Assets
 };
 
 export const FILE_EXT = '.png';

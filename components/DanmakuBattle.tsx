@@ -1,8 +1,11 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Bullet, BulletType, Character, Enemy, Particle } from '../types';
+import { Bullet, BulletType, Character, CharacterId, Enemy, Particle } from '../types';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, GLOBAL_SPEED_SCALE } from '../constants';
 import { spawnReimuPattern, getReimuPhaseInfo } from './patterns/Stage1Reimu';
+import KaguyaHUD from './ui/KaguyaHUD';
+import MokouHUD from './ui/MokouHUD';
+import HoloScroll from './ui/HoloScroll';
 
 interface DanmakuBattleProps {
   character: Character;
@@ -674,89 +677,38 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                 </div>
             </div>
 
-            {/* CUT-IN / PORTRAIT (RIGHT SIDE) */}
-            <div className={`absolute top-0 right-0 bottom-0 w-full z-40 pointer-events-none transition-all duration-700 flex flex-col items-end justify-center ${showCutIn ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-10'}`}>
-                 <div className="relative w-1/2 h-full flex flex-col justify-center items-end pr-8">
-                    {/* Tachie */}
-                    {enemy.portraitUrl && (
-                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-full h-[80%] overflow-visible mask-image-gradient-l">
-                            <img src={enemy.portraitUrl} className="w-full h-full object-contain object-right opacity-90 drop-shadow-[0_0_20px_rgba(0,0,0,0.8)]" alt="Cut In" />
-                        </div>
-                    )}
-                    
-                    {/* Spell Card Text */}
-                    <div className="bg-black/80 border-r-4 border-cyan-500 py-6 px-8 text-right shadow-[0_0_30px_cyan] relative z-10 backdrop-blur-sm mr-4 mt-40">
-                        <h3 className="text-cyan-400 font-mono text-2xl font-bold glitch-text mb-2">{phaseName}</h3>
-                        <p className="text-[10px] text-gray-400 font-mono uppercase tracking-wider">System Alert: Anomaly Detected</p>
-                    </div>
-                 </div>
-            </div>
+            {/* CUT-IN / PORTRAIT (RIGHT SIDE) - USING HOLO DIALOGUE ONLY NOW */}
+             {showCutIn && (
+                <HoloScroll 
+                    title={phaseName} 
+                    text={`System Alert: Anomaly Detected. Threat Level: ${currentPhase}.`} 
+                    portraitUrl={enemy.portraitUrl}
+                />
+            )}
 
             <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="relative z-10 block" />
         </div>
 
-        {/* SIDEBAR */}
-        <div className="w-[300px] bg-[#050a14] border-l border-cyan-900 flex flex-col p-6 text-white relative overflow-hidden font-mono z-20">
-            <h2 className="text-2xl text-center text-cyan-500 border-b border-cyan-800 pb-4 mb-8 tracking-widest">MONITOR</h2>
-            
-            <div className="space-y-6">
-                <div>
-                    <div className="text-cyan-800 text-xs mb-1">SCORE_BUFFER</div>
-                    <div className="text-xl text-white font-bold">{score.toLocaleString().padStart(9, '0')}</div>
-                </div>
-                <div>
-                    <div className="text-cyan-800 text-xs mb-1">RETRY_TOKENS (LIVES)</div>
-                    <div className="flex gap-2 text-2xl text-yellow-400">
-                        {Array(3).fill(0).map((_, i) => (
-                            <div key={i} className={`relative w-8 h-8 transition-opacity ${i < playerHp ? "opacity-100" : "opacity-20"}`}>
-                                {sprites['ICON_LIFE'] ? (
-                                    <img src={sprites['ICON_LIFE']} alt="Life" className="w-full h-full object-contain drop-shadow-[0_0_5px_yellow]" />
-                                ) : (
-                                    <span>★</span>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-                <div>
-                    <div className="text-cyan-800 text-xs mb-1">TIME STAGNATION (BOMBS)</div>
-                    <div className="text-xs text-gray-500 mb-2">[PRESS X]</div>
-                    <div className="flex gap-2 text-2xl">
-                        {Array(bombs).fill(0).map((_, i) => (
-                             <div key={i} className="relative w-8 h-8 animate-pulse">
-                                {sprites['ICON_BOMB'] ? (
-                                    <img src={sprites['ICON_BOMB']} alt="Bomb" className="w-full h-full object-contain drop-shadow-[0_0_5px_purple]" />
-                                ) : (
-                                    <span>⏳</span>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-                
-                <div className="mt-8 p-4 bg-cyan-900/10 border border-cyan-900/50 rounded">
-                    <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-400">GRAZE_COUNT</span>
-                        <span className="text-xl text-white">{graze}</span>
-                    </div>
-                </div>
-                
-                <div className="mt-8">
-                     <div className="text-cyan-800 text-xs mb-1">SYSTEM CONTROLS</div>
-                     <div className="text-xs text-gray-400">TAB - PAUSE</div>
-                     <div className="text-xs text-gray-400">SHIFT - FOCUS</div>
-                     <div className="text-xs text-gray-400">Z - FIRE</div>
-                     <div className="text-xs text-gray-400">X - BOMB</div>
-                </div>
-            </div>
-
-            <div className="mt-auto pt-4 border-t border-cyan-900/50 text-[10px] text-cyan-700 leading-relaxed">
-                <span className="animate-pulse">● CONNECTED</span><br/>
-                LATENCY: 12ms<br/>
-                RENDER: GL_PIPE_V2<br/>
-                ID: {character.id}
-            </div>
-        </div>
+        {/* SIDEBAR - MODULAR UI */}
+        {character.id === CharacterId.KAGUYA ? (
+            <KaguyaHUD 
+                hp={playerHp} 
+                maxHp={3} 
+                bombs={bombs} 
+                score={score} 
+                graze={graze} 
+                sprites={sprites} 
+            />
+        ) : (
+            <MokouHUD 
+                hp={playerHp} 
+                maxHp={3} 
+                bombs={bombs} 
+                score={score} 
+                graze={graze} 
+                sprites={sprites} 
+            />
+        )}
       </div>
     </div>
   );

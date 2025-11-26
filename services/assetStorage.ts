@@ -2,7 +2,7 @@
 import { ASSET_DIRS, FILE_EXT, SAVE_EXT } from "../constants";
 import { SaveData } from "../types";
 
-export type AssetType = 'sprite' | 'portrait' | 'background';
+export type AssetType = 'sprite' | 'portrait' | 'background' | 'ui';
 
 export interface AssetResult {
     url: string;
@@ -81,6 +81,7 @@ export const connectFileSystem = async (): Promise<boolean> => {
         assetDirs[ASSET_DIRS.SPRITES] = await assetsHandle.getDirectoryHandle(ASSET_DIRS.SPRITES, { create: true });
         assetDirs[ASSET_DIRS.PORTRAITS] = await assetsHandle.getDirectoryHandle(ASSET_DIRS.PORTRAITS, { create: true });
         assetDirs[ASSET_DIRS.BACKGROUNDS] = await assetsHandle.getDirectoryHandle(ASSET_DIRS.BACKGROUNDS, { create: true });
+        assetDirs[ASSET_DIRS.UI] = await assetsHandle.getDirectoryHandle(ASSET_DIRS.UI, { create: true });
         
         // 3. Create/Get 'saves' folder
         assetDirs[ASSET_DIRS.SAVES] = await rootDirHandle.getDirectoryHandle(ASSET_DIRS.SAVES, { create: true });
@@ -101,6 +102,7 @@ const getDirHandleForType = (type: AssetType): FileSystemDirectoryHandle | null 
         case 'sprite': return assetDirs[ASSET_DIRS.SPRITES];
         case 'portrait': return assetDirs[ASSET_DIRS.PORTRAITS];
         case 'background': return assetDirs[ASSET_DIRS.BACKGROUNDS];
+        case 'ui': return assetDirs[ASSET_DIRS.UI];
         default: return null;
     }
 };

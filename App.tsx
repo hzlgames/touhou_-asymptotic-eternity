@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Exploration from './components/Exploration';
 import DanmakuBattle from './components/DanmakuBattle';
@@ -97,7 +98,7 @@ const App: React.FC = () => {
           const next = { ...prev };
           if (type === 'portrait') next.portraits = { ...prev.portraits, [id]: result };
           else if (type === 'background') next.backgrounds = { ...prev.backgrounds, [id]: result };
-          else if (type === 'sprite') {
+          else if (type === 'sprite' || type === 'ui') {
               next.sprites = { ...prev.sprites, [id]: result };
               // Sort into sub-categories for easier lookup
               const isChar = Object.values(CharacterId).includes(id as any);
@@ -197,17 +198,39 @@ const App: React.FC = () => {
         { id: 'BULLET_SHARD', name: 'Bullet: Shard', desc: 'A sharp fragment.', prompt: 'Pixel art jagged shard of blue glowing glass, sharp edges.' },
         { id: 'BULLET_GLITCH', name: 'Bullet: Glitch', desc: 'Digital noise.', prompt: 'Pixel art square of colorful tv static noise, glitch effect.' },
         { id: 'BULLET_OFUDA', name: 'Bullet: Talisman', desc: 'Paper charm.', prompt: 'Pixel art red paper charm ofuda with black ink calligraphy, vertical.' },
-        // UI Icons
-        { id: 'ICON_LIFE', name: 'Icon: Life', desc: 'Life Star', prompt: 'Pixel art glowing yellow star icon, UI element, 32x32.' },
-        { id: 'ICON_BOMB', name: 'Icon: Bomb', desc: 'Spell Card Bomb', prompt: 'Pixel art hourglass icon, purple and gold, UI element, 32x32.' }
     ];
 
     for (const a of assets) {
-        // We reuse the 'sprite' type which maps to loadedAssets.sprites
         const res = await fetchAsset(a.id, a.name, a.desc, 'sprite', a.prompt);
         if (res) updateAssetRecord(a.id, 'sprite', res);
     }
     
+    // UI Assets
+    const uiAssets = [
+        // KAGUYA UI
+        { id: 'UI_KAGUYA_MOON_FULL', name: 'UI: Moon Full', desc: 'Full moon icon', prompt: 'Pixel art golden full moon with cybernetic circuit lines, UI icon on black background.' },
+        { id: 'UI_KAGUYA_MOON_GIBBOUS', name: 'UI: Moon Gibbous', desc: 'Gibbous moon icon', prompt: 'Pixel art golden gibbous moon with cybernetic circuit lines, UI icon on black background.' },
+        { id: 'UI_KAGUYA_MOON_HALF', name: 'UI: Moon Half', desc: 'Half moon icon', prompt: 'Pixel art golden half moon with cybernetic circuit lines, UI icon on black background.' },
+        { id: 'UI_KAGUYA_MOON_CRESCENT', name: 'UI: Moon Crescent', desc: 'Crescent moon icon', prompt: 'Pixel art golden crescent moon with cybernetic circuit lines, UI icon on black background.' },
+        { id: 'UI_KAGUYA_JEWEL', name: 'UI: Jewel', desc: 'Gem', prompt: 'Pixel art glowing magical gem stone, rainbow iridescent color, UI icon.' },
+        
+        // MOKOU UI
+        { id: 'UI_MOKOU_CLOCK_12', name: 'UI: Clock 12', desc: 'Clock full', prompt: 'Pixel art steampunk mechanical clock face pointing at 12 o\'clock, gold and clean, UI icon.' },
+        { id: 'UI_MOKOU_CLOCK_3', name: 'UI: Clock 3', desc: 'Clock 3', prompt: 'Pixel art steampunk mechanical clock face pointing at 3 o\'clock, slightly tarnished, UI icon.' },
+        { id: 'UI_MOKOU_CLOCK_6', name: 'UI: Clock 6', desc: 'Clock 6', prompt: 'Pixel art steampunk mechanical clock face pointing at 6 o\'clock, cracked glass, red glow, UI icon.' },
+        { id: 'UI_MOKOU_CLOCK_9', name: 'UI: Clock 9', desc: 'Clock 9', prompt: 'Pixel art steampunk mechanical clock face pointing at 9 o\'clock, heavily damaged, sparks, UI icon.' },
+        { id: 'UI_MOKOU_WING', name: 'UI: Phoenix Wing', desc: 'Wing', prompt: 'Pixel art phoenix wing made of fire and neon lights, facing right, UI icon.' },
+
+        // SHARED UI
+        { id: 'UI_FRAME_CORNER', name: 'UI: Frame', desc: 'Corner Frame', prompt: 'Maki-e gold lacquer corner frame element with cybernetic details, on black background.' },
+        { id: 'UI_FRAME_BORDER', name: 'UI: Border', desc: 'Straight Border', prompt: 'Maki-e gold lacquer straight border line with broken mirror shards embedded, on black background.' }
+    ];
+
+    for (const u of uiAssets) {
+        const res = await fetchAsset(u.id, u.name, u.desc, 'ui', u.prompt);
+        if (res) updateAssetRecord(u.id, 'ui', res);
+    }
+
     setLoadingStatus(null);
   };
 
