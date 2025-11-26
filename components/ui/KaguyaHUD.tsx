@@ -1,6 +1,5 @@
 
 import React, { useEffect, useState } from 'react';
-import { CANVAS_WIDTH } from '../../constants';
 
 interface KaguyaHUDProps {
     hp: number;
@@ -32,14 +31,41 @@ const KaguyaHUD: React.FC<KaguyaHUDProps> = ({ hp, maxHp, bombs, score, graze, s
     const moonUrl = getMoonSprite();
     const jewelUrl = sprites['UI_KAGUYA_JEWEL'];
     const borderUrl = sprites['UI_FRAME_BORDER'];
+    const cornerUrl = sprites['UI_FRAME_CORNER'];
 
     return (
-        <div className="w-[320px] h-full bg-[#050510] border-l-4 border-[#0B0B3B] relative overflow-hidden flex flex-col p-6 font-serif text-[#E0E0E6]">
+        <div className="w-[320px] h-full bg-[#050510] relative overflow-hidden flex flex-col p-8 font-serif text-[#E0E0E6]">
+            {/* Main Vertical Border (Left) - Using Texture Repeating */}
+            {borderUrl && (
+                <div 
+                    className="absolute top-0 bottom-0 left-0 w-3 z-20 opacity-80 mix-blend-screen"
+                    style={{ 
+                        backgroundImage: `url(${borderUrl})`,
+                        backgroundSize: '100% auto',
+                        backgroundRepeat: 'repeat-y'
+                    }}
+                />
+            )}
+            
+            {/* Corners */}
+            {cornerUrl && (
+                <>
+                    {/* Top Left */}
+                    <img src={cornerUrl} className="absolute top-0 left-0 w-16 h-16 z-20" alt="" />
+                    {/* Top Right */}
+                    <img src={cornerUrl} className="absolute top-0 right-0 w-16 h-16 z-20 transform scale-x-[-1]" alt="" />
+                    {/* Bottom Left */}
+                    <img src={cornerUrl} className="absolute bottom-0 left-0 w-16 h-16 z-20 transform scale-y-[-1]" alt="" />
+                    {/* Bottom Right */}
+                    <img src={cornerUrl} className="absolute bottom-0 right-0 w-16 h-16 z-20 transform rotate-180" alt="" />
+                </>
+            )}
+
             {/* Background Texture */}
             <div className="absolute inset-0 opacity-20 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]"></div>
             
             {/* Header / Score */}
-            <div className="relative z-10 mb-8 text-center border-b border-white/20 pb-4">
+            <div className="relative z-10 mb-8 text-center border-b border-white/20 pb-4 mx-4">
                 <div className="text-xs tracking-[0.4em] text-cyan-400 mb-2">SYSTEM: LUNAR_PHASE</div>
                 <div className="text-3xl font-bold tracking-widest text-[#FFD700] drop-shadow-[0_0_10px_rgba(255,215,0,0.5)]">
                     {score.toLocaleString().padStart(9, '0')}
@@ -47,7 +73,7 @@ const KaguyaHUD: React.FC<KaguyaHUDProps> = ({ hp, maxHp, bombs, score, graze, s
             </div>
 
             {/* HP: The Moon */}
-            <div className="flex flex-col items-center mb-10 relative">
+            <div className="flex flex-col items-center mb-10 relative z-10">
                 <div 
                     className="w-48 h-48 relative transition-transform duration-100" 
                     style={{ transform: `translateX(${shake}px)` }}
@@ -88,12 +114,7 @@ const KaguyaHUD: React.FC<KaguyaHUDProps> = ({ hp, maxHp, bombs, score, graze, s
             </div>
 
             {/* Graze / Info */}
-            <div className="mt-auto bg-[#0B0B3B]/50 p-4 border border-cyan-900 relative">
-                 {borderUrl && (
-                     <div className="absolute -top-2 left-0 right-0 h-2 overflow-hidden opacity-50">
-                         <img src={borderUrl} className="w-full h-full object-cover" />
-                     </div>
-                 )}
+            <div className="mt-auto bg-[#0B0B3B]/50 p-4 border border-cyan-900 relative z-10 mx-2">
                  <div className="flex justify-between items-center mb-2">
                      <span className="text-cyan-400 text-sm">GRAZE</span>
                      <span className="text-xl">{graze}</span>

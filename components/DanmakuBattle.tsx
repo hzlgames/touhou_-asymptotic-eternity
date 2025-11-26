@@ -619,7 +619,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
 
   return (
     <div className={`flex w-full h-screen bg-[#050510] overflow-hidden items-center justify-center font-serif select-none outline-none ${isGlitching ? 'hue-rotate-90 contrast-125' : ''}`} tabIndex={0} autoFocus>
-      <div className="flex shadow-[0_0_50px_rgba(0,255,255,0.2)] border-2 border-cyan-900 bg-[#0f0f1a] relative">
+      <div className="flex bg-[#0f0f1a] relative">
         <div className="relative" style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}>
             
             {/* BACKGROUND - FORCED LOW BRIGHTNESS */}
