@@ -10,9 +10,9 @@ const createBullet = (props: Partial<Bullet>): Bullet => ({
 });
 
 export const getReimuPhaseInfo = (hpPercent: number) => {
-    if (hpPercent < 0.2) return { phase: 4, name: 'System Meltdown "Blue Screen of Death"' };
-    if (hpPercent < 0.5) return { phase: 3, name: 'Overwork "Anger of No Tea Time"' };
-    if (hpPercent < 0.8) return { phase: 2, name: 'Urgent Task "Deadline Pressure"' };
+    if (hpPercent < 0.45) return { phase: 4, name: 'System Meltdown "Blue Screen of Death"' };
+    if (hpPercent < 0.7) return { phase: 3, name: 'Overwork "Anger of No Tea Time"' };
+    if (hpPercent < 0.85) return { phase: 2, name: 'Urgent Task "Deadline Pressure"' };
     return { phase: 1, name: 'Labor Sign "Scanline Printer"' };
 };
 
