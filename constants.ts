@@ -4,6 +4,9 @@ import { Character, CharacterId, Enemy, Scenario } from './types';
 export const CANVAS_WIDTH = 600;
 export const CANVAS_HEIGHT = 800;
 
+// Game Balance Constants
+export const GLOBAL_SPEED_SCALE = 0.8; // Slows down all bullet movement
+
 // Defines the directory names for the local file system
 export const ASSET_DIRS = {
     ROOT: 'assets',

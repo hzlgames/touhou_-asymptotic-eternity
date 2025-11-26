@@ -1,6 +1,7 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Bullet, BulletType, Character, Enemy, Particle } from '../types';
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../constants';
+import { CANVAS_HEIGHT, CANVAS_WIDTH, GLOBAL_SPEED_SCALE } from '../constants';
 
 interface DanmakuBattleProps {
   character: Character;
@@ -180,7 +181,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
       const bullets: Bullet[] = [];
       const createBullet = (props: Partial<Bullet>): Bullet => ({
           x: bx, y: by, speed: 2, angle: Math.PI/2, accel: 0, angularVelocity: 0,
-          radius: 4, type: BulletType.ORB, color: 'white', isEnemy: true, id: Math.random(), grazed: false,
+          radius: 8, type: BulletType.ORB, color: 'white', isEnemy: true, id: Math.random(), grazed: false,
           maxReflections: 0, ...props
       });
 
@@ -203,7 +204,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                       angle: Math.PI / 2, 
                       type: BulletType.TICKET, // Rectangles
                       color: '#ffcccc', 
-                      radius: 8, // Larger bullet
+                      radius: 12, // Increased Radius
                       delay: (x / CANVAS_WIDTH) * 20 // Wave effect delay
                   }));
               }
@@ -217,7 +218,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                    angle: Math.PI / 2 + (Math.random() - 0.5),
                    type: BulletType.SHARD,
                    color: 'red',
-                   radius: 4
+                   radius: 6 // Increased Radius
                }));
           }
       }
@@ -240,7 +241,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                        angle: Math.PI / 2, 
                        type: BulletType.TICKET, // "Invoices"
                        color: '#ffaaaa', 
-                       radius: 6
+                       radius: 10 // Increased Radius
                    }));
               }
           }
@@ -256,7 +257,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                   angle: Math.atan2(playerY - by, playerX - bx), 
                   type: BulletType.CUP, 
                   color: '#ffffff', 
-                  radius: 14,
+                  radius: 18, // Increased Radius
                   timer: 60, // Explodes in 60 frames
                   accel: -0.04 // Slows down to stop
               }));
@@ -271,7 +272,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                   y: Math.random() * CANVAS_HEIGHT * 0.5, 
                   speed: 1.5, 
                   angle: Math.random() * Math.PI * 2, 
-                  type: BulletType.GLITCH, color: '#00FFFF', radius: 9 
+                  type: BulletType.GLITCH, color: '#00FFFF', radius: 12 
               }));
           }
           if (tick % 70 === 0) {
@@ -282,7 +283,8 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                        speed: 2.0,
                        angle: (Math.PI * 2 / 10) * i + tick,
                        type: BulletType.SHARD,
-                       color: 'red'
+                       color: 'red',
+                       radius: 6
                    }));
                }
           }
@@ -299,11 +301,24 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
 
     let reqId: number;
 
-    const update = () => {
+    // --- FRAME LOCK ---
+    const fps = 60;
+    const fpsInterval = 1000 / fps;
+    let then = performance.now();
+    let elapsed = 0;
+    // ------------------
+
+    const update = (now: number) => {
+        reqId = requestAnimationFrame(update);
+
+        elapsed = now - then;
+        if (elapsed < fpsInterval) return;
+
+        then = now - (elapsed % fpsInterval);
+
         if (!stateRef.current.isRunning || isPaused) {
              // Keep drawing even if paused
              draw(ctx);
-             reqId = requestAnimationFrame(update);
              return;
         }
 
@@ -364,14 +379,14 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         // --- PHASE 2 GIMMICK: DEADLINE WALL ---
         let topLimit = 0;
         if (isReimu && currentPhase === 2 && timeScale > 0.5) {
-            state.crushingWallY = Math.min(state.crushingWallY + 0.04, CANVAS_HEIGHT * 0.4); // Moves down SLOWER
+            state.crushingWallY = Math.min(state.crushingWallY + 0.04 * GLOBAL_SPEED_SCALE, CANVAS_HEIGHT * 0.4); // Moves down SLOWER
             topLimit = state.crushingWallY;
         }
 
         // Player Movement
         const isFocus = keys['Shift'];
         state.player.isFocus = isFocus;
-        const moveSpeed = isFocus ? character.focusSpeed : character.speed;
+        const moveSpeed = (isFocus ? character.focusSpeed : character.speed) * GLOBAL_SPEED_SCALE;
         
         // Banking Logic (Tilt)
         let bank = 0;
@@ -460,25 +475,25 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                     }
                     state.boss.y = 80;
                     // Snap movement
-                    state.boss.x += (state.boss.targetX - state.boss.x) * 0.1;
+                    state.boss.x += (state.boss.targetX - state.boss.x) * 0.1 * GLOBAL_SPEED_SCALE;
                     
                 } else if (currentPhase === 2) {
                     // DEADLINE: Hover above the wall
                     state.boss.targetY = state.crushingWallY - 40; 
                     state.boss.x = CANVAS_WIDTH / 2 + Math.sin(state.boss.tick * 0.02) * 100; // Wide sway
                     
-                    state.boss.y += (state.boss.targetY - state.boss.y) * 0.1;
+                    state.boss.y += (state.boss.targetY - state.boss.y) * 0.1 * GLOBAL_SPEED_SCALE;
                 } else if (currentPhase === 3) {
                     // TEA TIME: Frantic movement
                     state.boss.targetX = CANVAS_WIDTH / 2 + Math.sin(state.boss.tick * 0.04) * 150;
                     state.boss.targetY = 100 + Math.cos(state.boss.tick * 0.07) * 40;
                     
-                    state.boss.x += (state.boss.targetX - state.boss.x) * 0.05;
-                    state.boss.y += (state.boss.targetY - state.boss.y) * 0.05;
+                    state.boss.x += (state.boss.targetX - state.boss.x) * 0.05 * GLOBAL_SPEED_SCALE;
+                    state.boss.y += (state.boss.targetY - state.boss.y) * 0.05 * GLOBAL_SPEED_SCALE;
                 } else {
                     // Default
-                    state.boss.x += (state.boss.targetX - state.boss.x) * 0.08;
-                    state.boss.y += (state.boss.targetY - state.boss.y) * 0.08;
+                    state.boss.x += (state.boss.targetX - state.boss.x) * 0.08 * GLOBAL_SPEED_SCALE;
+                    state.boss.y += (state.boss.targetY - state.boss.y) * 0.08 * GLOBAL_SPEED_SCALE;
                 }
             } 
 
@@ -491,7 +506,9 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
             }
         }
 
-        const playerHitbox = isFocus ? 3 : 5;
+        // --- HITBOX LOGIC ---
+        // Normal Move (Fast) = 2px (Smaller). Focused Move (Slow) = 3px.
+        const playerHitbox = isFocus ? 3 : 2;
         const grazeRadius = 24;
         
         // Bullet Physics
@@ -506,6 +523,9 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
             let currentSpeed = b.isEnemy ? b.speed * timeScale : b.speed;
             let currentAccel = b.isEnemy ? b.accel * timeScale : b.accel;
             let currentAngVel = b.isEnemy ? b.angularVelocity * timeScale : b.angularVelocity;
+
+            // Apply GLOBAL SPEED SCALE
+            currentSpeed *= GLOBAL_SPEED_SCALE;
 
             // Lens Effect Modifiers
             if (inLens && b.isEnemy) {
@@ -530,7 +550,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                              angle: (Math.PI*2/12)*k + Math.random()*0.5,
                              type: BulletType.SHARD,
                              color: '#aaffff',
-                             radius: 3,
+                             radius: 6,
                              isEnemy: true,
                              id: Math.random(),
                              grazed: false,
@@ -565,7 +585,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                 let dist = Math.sqrt(dx*dx + dy*dy);
                 let hitDist = b.radius + playerHitbox;
                 
-                if (b.type === BulletType.TICKET) hitDist = 6 + playerHitbox; // Square is bigger
+                if (b.type === BulletType.TICKET) hitDist = 10 + playerHitbox; // Square is bigger
 
                 if (state.player.iframes <= 0) {
                     if (dist < hitDist) {
@@ -617,7 +637,6 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         if (bossShake > 0) setBossShake(prev => prev - 1);
 
         draw(ctx);
-        reqId = requestAnimationFrame(update);
     };
 
     const draw = (ctx: CanvasRenderingContext2D) => {
@@ -690,7 +709,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                 const sprite = spriteKey ? spriteMapRef.current[spriteKey] : null;
 
                 if (sprite) {
-                    const sSize = b.radius * 3; 
+                    const sSize = b.radius * 3.5; // Scaled up sprite
                     ctx.save();
                     ctx.translate(b.x, b.y);
                     ctx.rotate(b.angle + (b.type === BulletType.CUP ? 0 : Math.PI/2)); 
@@ -700,9 +719,9 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                     // Fallback / Default Shapes
                     if (b.type === BulletType.TICKET) { 
                         ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle); 
-                        ctx.fillRect(-6, -8, 12, 16); 
+                        ctx.fillRect(-10, -12, 20, 24); // Larger rect
                         ctx.fillStyle = 'black'; 
-                        ctx.fillRect(-4, -4, 8, 1); ctx.fillRect(-4, 0, 8, 1); ctx.fillRect(-4, 4, 6, 1);
+                        ctx.fillRect(-6, -6, 12, 1); ctx.fillRect(-6, 0, 12, 1); ctx.fillRect(-6, 6, 8, 1);
                         ctx.restore();
                     } else if (b.type === BulletType.CUP) { 
                         ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
@@ -712,7 +731,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                         ctx.restore();
                     } else if (b.type === BulletType.SHARD) {
                         ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
-                        ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4, 4); ctx.lineTo(-4, 4); ctx.fill();
+                        ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(6, 6); ctx.lineTo(-6, 6); ctx.fill();
                         ctx.restore();
                     } else if (b.type === BulletType.ORB) { 
                         ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(state.boss.tick * 0.1); 
@@ -801,9 +820,12 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                     ctx.fillStyle = 'blue';
                     ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 10, 0, Math.PI*2); ctx.fill();
                 }
+                
+                // --- DRAW HITBOX (DEBUG STYLE) ---
                 if (state.player.isFocus) {
                     ctx.fillStyle = '#ff0000';
-                    ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 4, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 3, 0, Math.PI*2); ctx.fill();
+                    ctx.strokeStyle = 'white'; ctx.lineWidth = 1; ctx.stroke();
                 }
             }
         }
