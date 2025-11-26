@@ -693,7 +693,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         {character.id === CharacterId.KAGUYA ? (
             <KaguyaHUD 
                 hp={playerHp} 
-                maxHp={3} 
+                maxHp={4} 
                 bombs={bombs} 
                 score={score} 
                 graze={graze} 
