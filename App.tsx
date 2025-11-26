@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useEffect } from 'react';
 import Exploration from './components/Exploration';
 import DanmakuBattle from './components/DanmakuBattle';
@@ -199,7 +196,10 @@ const App: React.FC = () => {
         { id: 'BULLET_CUP', name: 'Bullet: Tea Cup', desc: 'A ceramic cup.', prompt: 'Pixel art white japanese tea cup, side view.' },
         { id: 'BULLET_SHARD', name: 'Bullet: Shard', desc: 'A sharp fragment.', prompt: 'Pixel art jagged shard of blue glowing glass, sharp edges.' },
         { id: 'BULLET_GLITCH', name: 'Bullet: Glitch', desc: 'Digital noise.', prompt: 'Pixel art square of colorful tv static noise, glitch effect.' },
-        { id: 'BULLET_OFUDA', name: 'Bullet: Talisman', desc: 'Paper charm.', prompt: 'Pixel art red paper charm ofuda with black ink calligraphy, vertical.' }
+        { id: 'BULLET_OFUDA', name: 'Bullet: Talisman', desc: 'Paper charm.', prompt: 'Pixel art red paper charm ofuda with black ink calligraphy, vertical.' },
+        // UI Icons
+        { id: 'ICON_LIFE', name: 'Icon: Life', desc: 'Life Star', prompt: 'Pixel art glowing yellow star icon, UI element, 32x32.' },
+        { id: 'ICON_BOMB', name: 'Icon: Bomb', desc: 'Spell Card Bomb', prompt: 'Pixel art hourglass icon, purple and gold, UI element, 32x32.' }
     ];
 
     for (const a of assets) {

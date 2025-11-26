@@ -1,5 +1,3 @@
-
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Bullet, BulletType, Character, Enemy, Particle } from '../types';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../constants';
@@ -189,37 +187,37 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
       // PHASE 1: 'Labor Sign "Scanline Printer"' (Redesigned)
       // Aesthetic: Scans across the screen rigidly, leaving gaps.
       if (phase === 1) {
-          const scanPeriod = 60; // Frames per scan line spawn
+          const scanPeriod = 80; // Slower scan
           if (tick % scanPeriod === 0) {
               const gapX = (Math.sin(tick * 0.05) * 200) + CANVAS_WIDTH / 2;
               
-              for (let x = 20; x < CANVAS_WIDTH - 20; x += 30) {
+              for (let x = 30; x < CANVAS_WIDTH - 30; x += 35) {
                   // Leave a gap around the sine wave
-                  if (Math.abs(x - gapX) < 60) continue;
+                  if (Math.abs(x - gapX) < 70) continue;
 
                   // Vertical Line
                   bullets.push(createBullet({ 
                       x: x, 
                       y: 50, 
-                      speed: 2.0, 
+                      speed: 1.5, // Slower speed
                       angle: Math.PI / 2, 
                       type: BulletType.TICKET, // Rectangles
                       color: '#ffcccc', 
-                      radius: 6,
+                      radius: 8, // Larger bullet
                       delay: (x / CANVAS_WIDTH) * 20 // Wave effect delay
                   }));
               }
           }
           // Occasional "Paper Jam" (Random Debris)
-          if (tick % 20 === 0) {
+          if (tick % 30 === 0) {
                bullets.push(createBullet({
                    x: bx + (Math.random() - 0.5) * 100,
                    y: by + 20,
-                   speed: 1.5,
+                   speed: 1.2,
                    angle: Math.PI / 2 + (Math.random() - 0.5),
                    type: BulletType.SHARD,
                    color: 'red',
-                   radius: 3
+                   radius: 4
                }));
           }
       }
@@ -229,20 +227,20 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
           // The bar logic is handled in the main update loop (crushingWallY)
           const wallY = stateRef.current.crushingWallY;
           
-          if (tick % 15 === 0) {
+          if (tick % 20 === 0) {
               // Dense rain of tickets from the deadline wall
-              for(let i=0; i < CANVAS_WIDTH; i += 40) {
+              for(let i=0; i < CANVAS_WIDTH; i += 45) {
                    // Random gap offset
                    const offset = Math.sin(tick * 0.05) * 20; 
                    
                    bullets.push(createBullet({ 
                        x: i + offset + (Math.random()*10), 
                        y: wallY, 
-                       speed: 1.8 + Math.random() * 0.5, 
+                       speed: 1.5 + Math.random() * 0.5, 
                        angle: Math.PI / 2, 
                        type: BulletType.TICKET, // "Invoices"
                        color: '#ffaaaa', 
-                       radius: 5
+                       radius: 6
                    }));
               }
           }
@@ -250,38 +248,38 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
       
       // PHASE 3: 'Overwork "Anger of No Tea Time"'
       else if (phase === 3) {
-          if (tick % 90 === 0) {
+          if (tick % 100 === 0) {
               // Throw Tea Cup
               bullets.push(createBullet({ 
                   x: bx, y: by, 
-                  speed: 4, 
+                  speed: 3.5, 
                   angle: Math.atan2(playerY - by, playerX - bx), 
                   type: BulletType.CUP, 
                   color: '#ffffff', 
-                  radius: 12,
+                  radius: 14,
                   timer: 60, // Explodes in 60 frames
-                  accel: -0.05 // Slows down to stop
+                  accel: -0.04 // Slows down to stop
               }));
           }
       }
       
       // PHASE 4: 'System Meltdown "Blue Screen of Death"'
       else if (phase === 4) {
-          if (tick % 5 === 0) {
+          if (tick % 6 === 0) {
               bullets.push(createBullet({ 
                   x: Math.random() * CANVAS_WIDTH, 
                   y: Math.random() * CANVAS_HEIGHT * 0.5, 
-                  speed: 2, 
+                  speed: 1.5, 
                   angle: Math.random() * Math.PI * 2, 
-                  type: BulletType.GLITCH, color: '#00FFFF', radius: 8 
+                  type: BulletType.GLITCH, color: '#00FFFF', radius: 9 
               }));
           }
-          if (tick % 60 === 0) {
+          if (tick % 70 === 0) {
                // Circle burst
                for(let i=0; i<10; i++) {
                    bullets.push(createBullet({
                        x: bx, y: by,
-                       speed: 2.5,
+                       speed: 2.0,
                        angle: (Math.PI * 2 / 10) * i + tick,
                        type: BulletType.SHARD,
                        color: 'red'
@@ -366,7 +364,7 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
         // --- PHASE 2 GIMMICK: DEADLINE WALL ---
         let topLimit = 0;
         if (isReimu && currentPhase === 2 && timeScale > 0.5) {
-            state.crushingWallY = Math.min(state.crushingWallY + 0.05, CANVAS_HEIGHT * 0.4); // Moves down SLOWLY
+            state.crushingWallY = Math.min(state.crushingWallY + 0.04, CANVAS_HEIGHT * 0.4); // Moves down SLOWER
             topLimit = state.crushingWallY;
         }
 
@@ -763,11 +761,27 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                 if (playerSprite) {
                     const pSize = 48; 
                     
-                    if (character.spriteSheetType === 'GRID_3x3') {
+                    if (character.spriteSheetType === 'GRID_4x4') {
+                        // 4x4 GRID LOGIC for Battle (Vertical Shooter)
+                        // Rows: 0=Down, 1=Left, 2=Right, 3=Up(Back)
+                        // We primarily use Row 3 (Back) since we are shooting up.
+                        // We use Row 1 or 2 when banking left/right.
+                        
+                        let row = 3; // Default: Back view
+                        if (state.player.bank === -1) row = 1; // Left
+                        if (state.player.bank === 1) row = 2;  // Right
+                        
+                        // Use Column 1 for movement loop? Or simple toggle?
+                        // Let's use Col 1.
+                        const col = 1;
+
+                        const fw = playerSprite.width / 4;
+                        const fh = playerSprite.height / 4;
+                        
+                        ctx.drawImage(playerSprite, col*fw, row*fh, fw, fh, state.player.x - pSize/2, state.player.y - pSize/2, pSize, pSize);
+
+                    } else if (character.spriteSheetType === 'GRID_3x3') {
                         // Use Row 2 (Back View) for vertical shooter
-                        // Frame Selection:
-                        // Center (Idx 0/1/2?) - 3 cols. Center is 1.
-                        // Bank Left -> 0. Bank Right -> 2.
                         let col = 1; // Center frame of Back View
                         if (state.player.bank === -1) col = 0; // Left
                         if (state.player.bank === 1) col = 2;  // Right
@@ -933,14 +947,30 @@ const DanmakuBattle: React.FC<DanmakuBattleProps> = ({ character, enemy, onVicto
                 <div>
                     <div className="text-cyan-800 text-xs mb-1">RETRY_TOKENS (LIVES)</div>
                     <div className="flex gap-2 text-2xl text-yellow-400">
-                        {Array(3).fill(0).map((_, i) => <span key={i} className={i < playerHp ? "opacity-100 drop-shadow-[0_0_5px_yellow]" : "opacity-20"}>★</span>)}
+                        {Array(3).fill(0).map((_, i) => (
+                            <div key={i} className={`relative w-8 h-8 transition-opacity ${i < playerHp ? "opacity-100" : "opacity-20"}`}>
+                                {sprites['ICON_LIFE'] ? (
+                                    <img src={sprites['ICON_LIFE']} alt="Life" className="w-full h-full object-contain drop-shadow-[0_0_5px_yellow]" />
+                                ) : (
+                                    <span>★</span>
+                                )}
+                            </div>
+                        ))}
                     </div>
                 </div>
                 <div>
                     <div className="text-cyan-800 text-xs mb-1">TIME STAGNATION (BOMBS)</div>
                     <div className="text-xs text-gray-500 mb-2">[PRESS X]</div>
                     <div className="flex gap-2 text-2xl">
-                        {Array(bombs).fill(0).map((_, i) => <span key={i} className="text-purple-400 drop-shadow-[0_0_5px_purple] animate-pulse">⏳</span>)}
+                        {Array(bombs).fill(0).map((_, i) => (
+                             <div key={i} className="relative w-8 h-8 animate-pulse">
+                                {sprites['ICON_BOMB'] ? (
+                                    <img src={sprites['ICON_BOMB']} alt="Bomb" className="w-full h-full object-contain drop-shadow-[0_0_5px_purple]" />
+                                ) : (
+                                    <span>⏳</span>
+                                )}
+                            </div>
+                        ))}
                     </div>
                 </div>
                 
